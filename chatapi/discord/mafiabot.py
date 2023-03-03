@@ -1,6 +1,7 @@
 # This example requires the 'message_content' privileged intent to function.
 import asyncio
 
+import os
 import time
 import typing as T
 from typing import List
@@ -26,7 +27,9 @@ if T.TYPE_CHECKING:
 from chatapi.discord.input_panel import InputPanel
 from engine.setup import do_setup
 
-TOKEN = 'MTA3OTg1MDUzNjUwMjgyOTEzNg.GokFWW.MrfXK8bZGcJ_wG09yiAKjvVMiXIy-rnOMLU8pI'
+TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
+if TOKEN is None:
+    raise OSError("No bot token")
 
 
 class MafiaBot(commands.Bot):
