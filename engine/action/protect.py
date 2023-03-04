@@ -74,6 +74,6 @@ class Protect(Action):
         """
         attacker: "Actor" = self._action_result.get("intercepted")
         if attacker is not None:
-            attacker.private_message(self.intercept_text())
+            attacker.game.messenger.private_actor(attacker, self.intercept_text())
 
         return super().message_results(actor, success)

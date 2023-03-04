@@ -1,4 +1,5 @@
 import asyncio
+import cachetools
 import time
 import typing as T
 
@@ -20,7 +21,6 @@ class Message:
         self._game_time = game_time
         self._message = message
 
-
     def __repr__(self) -> str:
         return f"**{self.message}**"
     
@@ -34,8 +34,15 @@ class Message:
 
     @classmethod
     def address_to(cls, actor: "Actor", message: str) -> "Message":
+        """
+        TODO: rename, this name is incorrect
+        """
         game: "Game" = actor.game
         return Message(time.time(), (game.turn_number, game.turn_phase), message)
+
+    @classmethod
+    def label_from(cls, actor: "Actor", message: str) -> "Message":
+        return cls.address_to(actor, f"{actor.name}: {message}")
 
     @property
     def real_timestamp(self) -> str:
@@ -56,50 +63,114 @@ class Message:
 
 class MessageDriver:
     """
+    Some sort of message boundary controller
+    """
+
+
+class InboundMessageDriver(MessageDriver):
+    """
+    Handles getting messages into the game from external sources.
+
+    Really this is just intended to allow bots to message the game chat.
+    """
+
+    async def run(self) -> None:
+        """
+        Generally these should process asynchonrously whenever we get a message
+        """
+
+
+class OutboundMessageDriver(MessageDriver):
+    """
     Some way of getting strings from in here to some text box or channel where they need to be
 
     Basically just a duck type
     """
 
-    async def public_publish(self, message: "Message") -> None:
+    async def flush_public(self) -> None:
         """
-        Publish a message to the bulletin that everybody can see
+        Flush the public queue for the message driver.
         """
 
-    async def private_publish(self, player: "Player", message: "Message") -> None:
+    async def flush_private(self, player: "Player" = None) -> None:
         """
-        Publish a message to a player that only they can see
+        Flush the private queue for the message driver for a player.
+
+        If player is not provided, flush all private queues.
+        """
+
+    async def public_publish(self, message: "Message", flush: bool = True) -> None:
+        """
+        Publish a message to the bulletin that everybody can see.
+
+        If flush is set, the message will be issued immediately.
+        """
+
+    async def private_publish(self, player: "Player", message: "Message", flush: bool = True) -> None:
+        """
+        Publish a message to a player that only they can see.
+
+        If flush is set, the message will be issued immediately.
         """
 
 
 class Messenger:
 
-    def __init__(self, game: "Game", message_driver: MessageDriver = None) -> None:
+    def __init__(self, game: "Game", *message_drivers: T.List[MessageDriver]) -> None:
         """
         Maintains a public message queue as well as a private message queue
 
         TODO: message driver goes here (i.e bot API)
         """
         self._game = game
-        self._message_driver: MessageDriver = message_driver
+        self._message_drivers: T.List[MessageDriver] = message_drivers or []
 
-        self._public_queue: T.List[Message] = []
+        self._inbound_tasks: T.Set[asyncio.Task] = set()
+
+    def start_inbound(self) -> None:
+        for driver in self.inbound_drivers:
+            self._inbound_tasks.add(asyncio.ensure_future(driver.run()))
+
+    @property
+    def inbound_drivers(self) -> T.Iterable[InboundMessageDriver]:
+        return [d for d in self._message_drivers if isinstance(d, InboundMessageDriver)]
+
+    @property
+    def outbound_drivers(self) -> T.Iterable[OutboundMessageDriver]:
+        return [d for d in self._message_drivers if isinstance(d, OutboundMessageDriver)]
+
+    def get_driver_by_class(self, klass: T.Type[MessageDriver]) -> T.Optional[MessageDriver]:
+        for driver in self._message_drivers:
+            if isinstance(driver, klass):
+                return driver
+        return None
+
+    def drive_messengers_public(self, message: "Message", flush: bool = True) -> None:
+        """
+        Drive all outbound public queue
+        """
+        for driver in self.outbound_drivers:
+            asyncio.create_task(driver.public_publish(message, flush=flush))
+
+    def drive_messengers_private(self, actor: "Actor", message: "Message", flush: bool = True) -> None:
+        """
+        Drive outbound private queues
+        """
+        for driver in self.outbound_drivers:
+            asyncio.create_task(driver.private_publish(actor.player, message, flush=flush))
 
     def announce(self, message: str, flush: bool = False) -> None:
         """
         If flush=True, it will flush the message immediately
         """
         msg = Message.announce(self._game, message)
-        if flush:
-            asyncio.ensure_future(self._message_driver.public_publish(msg))
-        else:
-            self._public_queue.append(msg)
+        self.drive_messengers_public(msg, flush=flush)
 
-    def private_actor(self, actor: "Actor", message: str) -> None:
+    def private_actor(self, actor: "Actor", message: str, flush: bool = True) -> None:
         if actor not in self._game.get_actors():
             print("WARNING: that actor is not associated with this game")
             return
-        actor._message_queue.append(Message.address_to(actor, message))
+        self.drive_messengers_private(actor, Message.address_to(actor, message), flush=flush)
 
     def private_number(self, number: int, message: str) -> None:
         if number > len(self._game.get_actors()):
@@ -113,14 +184,9 @@ class Messenger:
         if actor is None:
             print(f"WARNING: no actor by name {name}")
             return
-        if flush:
-            asyncio.ensure_future(
-                self._message_driver.private_publish(actor.player, Message.address_to(actor, message))
-            )
-        else:
-            actor._message_queue.append(Message.address_to(actor, message))
+        self.private_actor(actor, message, flush=flush)
 
-    async def drive_public_queue(self, count: int = None, delay: float = 0.0) -> None:
+    async def drive_public_queue(self) -> None:
         """
         Drive the public queue of messages with some delay between messages.
 
@@ -129,42 +195,17 @@ class Messenger:
         release of public messages.
         """
         print('Driving public queue')
-        delay = delay or 0.0  # do not allow a None value
-        # TODO: implement driving by counts
-        idx = 0
-        while self._public_queue:
-            if idx == count:
-                break
-            message = self._public_queue.pop(0)
-            if self._message_driver is None:
-                print(f"DEBUG::drive_public_queue {message}")
-            else:
-                print(message.message)
-                await self._message_driver.public_publish(message)
+        await asyncio.gather(*[driver.flush_public() for driver in self.outbound_drivers])
 
-            await asyncio.sleep(delay)
+    async def drive_all_private_queues(self) -> None:
+        print('Driving all private queues')
+        await asyncio.gather(*[driver.flush_private() for driver in self.outbound_drivers])
 
-    async def drive_all_private_queues(self, count: int = None, delay: float = 0.0) -> None:
-        await asyncio.gather(*[
-            self.drive_private_queue(actor, count=count, delay=delay) for actor in self._game.get_actors()
-        ])
-
-    async def drive_private_queue(self, actor: "Actor", count: int = None, delay: float = 0.0) -> None:
+    async def drive_private_queue(self, actor: "Actor") -> None:
         """
         Drive a private queue of messages with some delay between messages.
 
         By default will drive all messages instantly.
         """
-        idx = 0
-        while actor._message_queue:
-            if idx == count:
-                break
-            idx += 1
-            message = actor._message_queue.pop(0)
-            if self._message_driver is None:
-                print(f"DEBUG::drive_private_queue::[TO {actor.name}] {message}")
-            else:
-                print(message.message)
-                await self._message_driver.private_publish(actor.player, message)
-
-            await asyncio.sleep(delay)
+        print(f'Driving private queue for {actor.name}')
+        await asyncio.gather(*[driver.flush_private(actor.player) for driver in self.outbound_drivers])

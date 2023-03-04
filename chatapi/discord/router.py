@@ -1,8 +1,10 @@
 """
 Button Click Input Router
 """
+import asyncio
 import typing as T
 from cachetools import TTLCache
+from collections import defaultdict
 import disnake
 
 
@@ -40,6 +42,9 @@ class Router:
         self._button_router = Subrouter()
         self._string_router = Subrouter()
 
+        # mapping of channel name to a subrouter for that channel
+        self._message_routers: T.Dict[str, Subrouter] = defaultdict(Subrouter)
+
         self._button_general_callbacks: T.List[T.Coroutine] = list()
         self._button_custom_id_callbacks: T.Dict[str, T.Coroutine] = dict()
         self._string_general_callbacks: T.List[T.Coroutine] = list()
@@ -70,22 +75,36 @@ class Router:
     def unregister_string_custom_callback(self, key: str) -> None:
         self._string_router.unregister_custom_callback(key)
 
+    def register_message_callback(self, channel: str, callback: T.Coroutine) -> None:
+        self._message_routers[channel].register_general_callback(callback)
+
+    def unregister_message_callback(self, channel: str, callback: T.Coroutine) -> None:
+        self._message_routers[channel].unregister_general_callback(callback)
+
+    async def on_message(self, message: "disnake.Message") -> None:
+        print(f"Got a message: {message.content}")
+        router = self._message_routers.get(message.channel.name)
+        if router is None:
+            return
+        # TODO: i don't think it makes sense to support custom_id filters for message
+        # interactions but will need to re-evaluate this in the future
+        await asyncio.gather(*[gcb(message) for gcb in router._general_callbacks])
+
     async def on_interact(self, router: "Subrouter", interaction: "disnake.Interaction") -> None:
         print(interaction.id)  # debugging, see how often we get duplicates
         if interaction.id in self._seen_interactions:
             # should already be replied
             return
 
-        for gcb in router._general_callbacks:
-            try:
-                await gcb(interaction)
-            except Exception as exc:
-                print(f"Error executing callback: {repr(exc)}")
+        try:
+            await asyncio.gather(*[gcb(interaction) for gcb in router._general_callbacks])
+        except Exception as exc:
+            print(f"Erorr executing callback: {repr(exc)}")
 
         try:
             key: str = interaction.data.custom_id
         except AttributeError:
-            print("Warning: could not parse button click")
+            print("Warning: could not parse interaction")
 
         callback = router._custom_id_callbacks.get(key)
         if callback is None:

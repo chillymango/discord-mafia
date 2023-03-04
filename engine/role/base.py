@@ -7,6 +7,8 @@ import typing as T
 from engine.action.base import ActionSequence
 from engine.action.base import TargetGroup
 
+from proto import state_pb2
+
 
 class Role:
     """
@@ -59,7 +61,20 @@ class Role:
 
     @property
     def name(self) -> str:
-        return self.__class__.__name__
+        # translate it from camel case if needed
+        if self._name is not None:
+            return self._name
+
+        name = ""
+        for prev_char, next_char in zip(self.__class__.__name__[:-1], self.__class__.__name__[1:]):
+            name += prev_char
+            if prev_char == prev_char.lower() and next_char == next_char.upper():
+                name += " "
+
+        name += next_char
+        self._name = name
+
+        return name
 
     def __repr__(self) -> str:
         return self.name
@@ -72,6 +87,7 @@ class Role:
         If we do not find one, we will use a default config.
         The default config should also be defined in this class.
         """
+        self._name = None
         self._config = config
         self._init_with_config()
 
@@ -97,6 +113,18 @@ class Role:
         self._cannot_be_healed = self._config.get("cannot_be_healed", self.default_cannot_be_healed)
 
         self._vests = self._config.get("vests", self.default_vests)
+
+    def to_proto(self) -> state_pb2.Role:
+        role = state_pb2.Role(name=self.name)
+        role.role_description = self.role_description()
+        if self.day_actions():
+            role.action_description = self.day_action_description()
+        elif self.night_actions():
+            role.action_description = self.night_action_description()
+        else:
+            role.action_description = "You have no possible actions."
+        role.affiliation = self.affiliation
+        return role
 
     @property
     def vests(self) -> int:

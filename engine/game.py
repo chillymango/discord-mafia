@@ -10,6 +10,7 @@ from engine.report import KillReport
 from engine.message import Messenger
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
+from proto import state_pb2
 
 if T.TYPE_CHECKING:
     from engine.player import Player
@@ -34,6 +35,17 @@ class Game:
         # these are general rules. Some roles can override (e.g blackmailer)
         self._allow_chat = False
         self._allow_pm = False
+
+    def to_proto(self) -> state_pb2.Game:
+        game = state_pb2.Game(
+            game_phase=self.game_phase.name,
+            turn_phase=self.turn_phase.name,
+            turn_number=self.turn_number,
+            tribunal=self.tribunal.to_proto()
+        )
+        game.actors.extend([a.to_proto() for a in self.get_actors()])
+        # TODO: graveyard
+        return game
 
     def assign_roles(self, roles: T.List["Role"]) -> None:
         """
@@ -203,8 +215,8 @@ class Game:
             return
 
         # always drive private messages instantly
-        asyncio.ensure_future(self.messenger.drive_all_private_queues(delay=0.0))
+        asyncio.ensure_future(self.messenger.drive_all_private_queues())
 
         # drive public messages with specified delay for dramatic effect
-        asyncio.ensure_future(self.messenger.drive_public_queue(delay=delay))
+        asyncio.ensure_future(self.messenger.drive_public_queue())
         

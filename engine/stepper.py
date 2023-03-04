@@ -49,7 +49,7 @@ class Stepper:
         Flush all messages and then wait for some minimum duration
         """
         t_init = time.time()
-        self._game.flush_all_messages(delay=delay)
+        self._game.flush_all_messages()
         t_final = time.time()
         t_remaining = min_time - (t_final - t_init)
         await self._sleep(max(t_remaining, 0))

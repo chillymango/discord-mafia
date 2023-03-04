@@ -154,7 +154,7 @@ class WeightedSampler:
             return valid_roles[0]
 
 
-def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG) -> T.Tuple[bool, str]:
+def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG, override_player_count: bool = False) -> T.Tuple[bool, str]:
     """
     If setup succeeds, return True
     Otherwise return False
@@ -173,7 +173,7 @@ def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG) -> T.Tup
     role_config = config.get("roles", {})
 
     role_list: T.List[str] = setup_config["role_list"]
-    if len(game.players) != len(role_list):
+    if not override_player_count and (len(game.players) != len(role_list)):
         return False, f"Mismatched number of players. Have {len(game.players)} and need {len(role_list)}"
 
     required_roles: T.List[str] = []

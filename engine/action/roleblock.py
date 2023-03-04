@@ -43,7 +43,7 @@ class Roleblock(Action):
         self._action_result["intercepted"] = False
 
         # if your target has redirect_roleblockers enabled, you will silently
-        # redirect them to target you
+        # redirect them to target you (E E E K)
         # TODO: private attr access
         if target.role._intercept_rb:
             # they should visit you instead

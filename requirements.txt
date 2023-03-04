@@ -4,3 +4,7 @@ IPython
 cachetools
 numpy
 mock
+FastAPI
+uvicorn
+pydantic
+grpcio-tools

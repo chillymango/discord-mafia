@@ -44,7 +44,7 @@ class Constable(TownRole):
         return True
 
     @classmethod
-    def dayactions(cls) -> T.List["Action"]:
+    def day_actions(cls) -> T.List["Action"]:
         return [ConstableKill]
 
     @classmethod

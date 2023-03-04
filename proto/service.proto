@@ -1,0 +1,15 @@
+// Bot API definition
+syntax = "proto3";
+//import "command.proto";
+import "connect.proto";
+import "message.proto";
+import "state.proto";
+
+service GrpcBotApi {
+    rpc Connect(ConnectRequest) returns (ConnectResponse) { }
+    rpc Disconnect(DisconnectRequest) returns (DisconnectResponse) { }
+    rpc GetGame(GetGameRequest) returns (GetGameResponse) { }
+    rpc GetActor(GetActorRequest) returns (GetActorResponse) { }
+    rpc SubscribeMessages(SubscribeMessagesRequest) returns (stream SubscribeMessagesResponse) { }
+    rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) { }
+}

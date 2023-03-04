@@ -1,0 +1,108 @@
+// Fetch relevant game information
+syntax = "proto3";
+
+
+message Player {
+    // Name of the player
+    string name = 1;
+
+    // This is a bot player
+    bool is_bot = 2;
+
+    // This is a human player
+    bool is_human = 3;
+}
+
+message Role {
+    // Name of the Role
+    string name = 1;
+
+    // Affiliation of the Role
+    string affiliation = 2;
+
+    // Role description
+    string role_description = 3;
+
+    // Action description (mostly for ChatGPT probably)
+    string action_description = 4;
+
+}
+
+// Basically just an association class in proto
+message Actor {
+    Player player = 1;
+    Role role = 2;
+}
+
+message Game {
+    string game_phase = 1;
+    string turn_phase = 2;
+    int32 turn_number = 3;
+    repeated Actor actors = 4;
+    repeated Tombstone graveyard = 5;
+    Tribunal tribunal = 6;
+}
+
+message Tombstone {
+    Player player = 1;
+    string epitaph = 2;
+}
+
+message VoteCount {
+    Player player = 1;
+    int32 count = 2;
+}
+
+message Tribunal {
+    // Current state of the Tribunal
+    // This should be useful for tracking activity during Daylight
+    string state = 1;
+
+    // List of vote counts for players
+    repeated VoteCount trial_votes = 2;
+
+    // List of lynch votes for players
+    repeated VoteCount lynch_votes = 3;
+
+    // skip vote count
+    int32 skip_votes = 4;
+}
+
+message GetGameRequest {
+    // time at which the request was generated
+    float timestamp = 1;
+
+    // the ID of the bot that made the request
+    string bot_id = 2;
+}
+
+message GetGameResponse {
+    // time at which the response was generated
+    float timestamp = 1;
+
+    // the game object
+    Game game = 2;
+}
+
+message GetActorRequest {
+    // time at which the request was generated
+    float timestamp = 1;
+
+    // search identifier
+    oneof identifier {
+        // lookup a bot by some ID
+        string bot_id = 2;
+
+        // lookup a player by their name
+        string player_name = 3;
+    }
+}
+
+message GetActorResponse {
+    // time at which the response was generated
+    float timestamp = 1;
+
+    // I think as long as the bot doesn't actually *use* information like other player
+    // roles it'll still behave just fine, even if it technically has access to it.
+    Actor actor = 2;
+}

@@ -1,0 +1,83 @@
+// Game event stream protos (server to client)
+syntax = "proto3";
+
+
+// This refers to any message that could be received from the game.
+// Game messages, public messages, and private messages will all
+// use this.
+// This should be plumbed into the public queue as well as the private
+// queue for bots.
+message Message {
+
+    enum MessageSource {
+        GAME = 0;
+        PRIVATE = 1;
+        PUBLIC = 2;
+    }
+
+    // timestamp at which the message was sent
+    float timestamp = 1;
+
+    MessageSource source = 2;
+
+    // message content
+    string message = 3;
+}
+
+// Fetch all messages
+message SubscribeMessagesRequest {
+    // timestamp at which the request was issued
+    float timestamp = 1;
+
+    // bot ID to get messages for
+    string bot_id = 2;
+
+}
+
+message SubscribeMessagesResponse {
+    // timestamp at which the response was issued
+    float timestamp = 1;
+
+    repeated Message messages = 2;
+
+}
+
+message UnsubscribeMessagesRequest {
+    // timestamp at which the request was issued
+    float timestamp = 1;
+
+    // bot ID to unsubscribe for
+    string bot_id = 2;
+}
+
+message UnsubscribeMessagesResponse {
+    // timestamp at which the request was issued
+    float timestamp = 1;
+
+    bool success = 2;
+
+    string error = 3;
+}
+
+// Issue messages
+message SendMessageRequest {
+    // timestamp at which the response was issued
+    float timestamp = 1;
+
+    string bot_id = 2;
+    // Only allow issuing a single message
+    Message message = 3;
+
+    // issue this message with an alert notification
+    // by default messages will be silent
+    bool loud = 4;
+}
+
+message SendMessageResponse {
+    // timestamp at which the response was issued
+    float timestamp = 1;
+
+    bool success = 2;
+
+    string error = 3;
+}

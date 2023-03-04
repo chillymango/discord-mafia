@@ -12,6 +12,7 @@ from engine.affiliation import TRIAD
 from engine.crimes import Crime
 from engine.message import Message
 from engine.role.base import RoleGroup
+from proto import state_pb2
 
 if T.TYPE_CHECKING:
     from engine.action.kill import Kill
@@ -83,6 +84,13 @@ class Actor:
 
         # keep track of messages that have been issued to players?
         self._mesasge_history: T.List["Message"] = []
+
+    def to_proto(self) -> state_pb2.Actor:
+        actor = state_pb2.Actor(
+            player=self.player.to_proto(),
+            role=self.role.to_proto(),
+        )
+        return actor
 
     def reset_health(self) -> None:
         # never resurrect
@@ -281,17 +289,3 @@ class Actor:
  
     def add_crimes(self, crimes: T.Iterable["Crime"]) -> None:
         self._crimes.update(crimes)
-
-    def private_message(self, message: str) -> None:
-        if not message:
-            return
-        print(message)
-        self._message_queue.append(Message.address_to(self, message))
-
-    def flush_messages(self) -> T.List[Message]:
-        """
-        Return all messages from message queue and then empty queue
-        """
-        flushed = self._message_queue[:]
-        self._message_queue.clear()
-        return flushed

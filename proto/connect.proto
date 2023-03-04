@@ -1,0 +1,43 @@
+// Bots connecting to Discord to provide inputs and receive feedback
+syntax = "proto3";
+
+
+message ConnectRequest {
+    // timestamp at which request was issued
+    float timestamp = 1;
+
+    // request a bot by this name if it exists
+    optional string request_name = 2;
+}
+
+message ConnectResponse {
+    // timestamp at which request was issued
+    float timestamp = 1;
+
+    // The plain name of the bot account you have reserved
+    string bot_name = 2;
+
+    // The ID of the bot account you have reserved.
+    // This will be issued with all further requests.
+    string bot_id = 3;
+}
+
+message DisconnectRequest {
+    // timestamp at which request was issued
+    float timestamp = 1;
+
+    // The bot ID to disconnect from
+    string bot_id = 2;
+
+    // Whether or not to force the bot player to leave the game.
+    // This will result in their character committing suicide.
+    bool leave_game = 3;
+}
+
+message DisconnectResponse {
+    // timestamp at which request was issued
+    float timestamp = 1;
+
+    // Whether you successfully disconnected from the bot
+    bool success = 2;
+}

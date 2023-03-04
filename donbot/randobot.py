@@ -10,5 +10,5 @@ class RandoBot(DonBot):
 
     It will generate generic text.
 
-    It should be able to
+    When it detects that it has some choice, it will randomly select a choice.
     """

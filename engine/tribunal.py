@@ -2,6 +2,7 @@
 Trial System
 """
 import asyncio
+from enum import Enum
 import time
 import typing as T
 from collections import defaultdict
@@ -9,6 +10,7 @@ from collections import defaultdict
 from engine.component import Component
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
+from proto import state_pb2
 
 if T.TYPE_CHECKING:
     from chatapi.discord.view import ViewController
@@ -22,7 +24,7 @@ class TrialType:
     MULTI = 1
 
 
-class TribunalState:
+class TribunalState(Enum):
 
     CLOSED = 0  # Tribunal is closed to all external interactions
     TRIAL_VOTE = 1  # Tribunal is open to trial voting
@@ -83,8 +85,22 @@ class Tribunal(Component):
         self._judge: T.Optional["Actor"] = None
         self._mayor: T.Optional["Actor"] = None
 
+    def to_proto(self) -> state_pb2.Tribunal:
+        tribunal = state_pb2.Tribunal()
+        tribunal.state = self.state.name
+        tribunal.trial_votes.extend([
+            state_pb2.VoteCount(player=player, count=count)
+            for player, count in self._trial_vote.items()
+        ])
+        tribunal.lynch_votes.extend([
+            state_pb2.VoteCount(player=player, count=count)
+            for player, count in self._lynch_vote.items()
+        ])
+        tribunal.skip_votes = self.skip_vote_counts
+        return tribunal
+
     @property
-    def state(self) -> None:
+    def state(self) -> TribunalState:
         return self._state
 
     @property
@@ -349,11 +365,7 @@ class Tribunal(Component):
             if counts >= self.trial_quorum:
                 self._on_trial = target
                 self.messenger.announce(f"The town has voted to put {target.name} on trial     ({counts} votes)", flush=True)
-                self.messenger.private_message(
-                    target.name,
-                    "The town has voted to put you on trial!",
-                    flush=True
-                )
+                self.messenger.private_actor(target, "The town has voted to put you on trial!", flush=True)
                 return True
         return False
 

@@ -7,6 +7,8 @@ import typing as T
 if T.TYPE_CHECKING:
     from engine.actor import Actor
     from engine.crimes import Crime
+    from engine.game import Game
+    from engine.message import Messenger
 
 
 class Action:
@@ -66,15 +68,16 @@ class Action:
         actor.add_crimes(self.crimes.get(success, []))
 
     def message_results(self, actor: "Actor", success: bool) -> None:
+        msg = actor.game.messenger
         if success:
-            actor.private_message(self.feedback_text_success())
+            msg.private_actor(actor, self.feedback_text_success(), flush=False)
         elif success == False:
-            actor.private_message(self.feedback_text_fail())
+            msg.private_actor(actor, self.feedback_text_fail(), flush=False)
         for targ in actor.targets:
             if success:
-                targ.private_message(self.target_text_success())
+                msg.private_actor(targ, self.target_text_success(), flush=False)
             elif success == False:
-                targ.private_message(self.target_text_fail())
+                msg.private_actor(targ, self.target_text_fail(), flush=False)
         if success and self.announce():
             # if there is text here it should be announced
             actor.game.announce(self.announce())

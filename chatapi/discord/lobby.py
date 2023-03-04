@@ -1,8 +1,15 @@
+import asyncio
 import random
 import typing as T
 import disnake
 
+from chatapi.app.bot import BotUser
+from chatapi.app.bot_api import BotApi
+from chatapi.app.grpc.run import run_grpc_server
+from chatapi.discord.driver import BotMessageDriver
 from chatapi.discord.driver import DiscordDriver
+from chatapi.discord.driver import WebhookDriver
+from chatapi.discord.forward import ForwardChatMessages
 from chatapi.discord.input_panel import InputPanel
 from chatapi.discord.input_panel import InputController
 from chatapi.discord.view import ViewController
@@ -88,8 +95,10 @@ class Lobby:
         # uh
         self._view_controller: ViewController = None
 
+        self._server_task: asyncio.Task = None
         self._router = router
-        self._driver: DiscordDriver = None
+        self._discord_driver: DiscordDriver = None
+        self._webhook_driver: WebhookDriver = None
         self.town_hall: disnake.TextChannel = None
         self.bulletin: disnake.TextChannel = None
         self._guild: disnake.Guild = None
@@ -172,7 +181,7 @@ class Lobby:
             guild = interaction.guild
             self.pm_channels[user] = await guild.create_text_channel(f"mafia-{user.name}")
             if user not in self.players:
-                self.players[user] = Player(user.name)
+                self.players[user] = Player.create_from_user(user)
             if self.players[user] not in self.roster:
                 self.roster.append(self.players[user])
             await interaction.send("You have successfully joined the lobby.", ephemeral=True)
@@ -252,11 +261,11 @@ class Lobby:
         bots_to_add = 15 - len(self.users)
         for _ in range(bots_to_add):
             name = BOT_NAMES.pop()
-            bot_player = Player(name)
+            bot_player = Player.create_from_bot(BotUser(name))
             self.bots.append(bot_player)
             self.roster.append(bot_player)
         await self.update_lobby()
-        await interaction.send(f"Added bot players", ephemeral=True, delete_after=10.0)
+        await interaction.send(f"Added bot players", ephemeral=True, delete_after=0.0)
 
     async def remove_bot(self, interaction: "disnake.Interaction") -> None:
         """
@@ -335,7 +344,19 @@ class Lobby:
         Just kidding we create a friendly environment in which the game can survive.
         We will manage that here I guess?
         """
+        try:
+            await self.inner_start(interaction)
+        finally:
+            if self._server_task is not None:
+                self._server_task.cancel()
+
+    async def inner_start(self, interaction: "disnake.Interaction") -> None:
+        from chatapi.discord.mafiabot import grpc_api
+
         self._game = Game(config=EXAMPLE_CONFIG)
+        # start grpc here
+        self._server_task = asyncio.ensure_future(run_grpc_server(self._game))
+
         self._stepper = Stepper(self._game, EXAMPLE_CONFIG)
         self._skipper = Stepper(self._game, EXAMPLE_CONFIG, sleeper=sleep_override)
         self._game.add_players(*self.roster)
@@ -348,6 +369,7 @@ class Lobby:
             # make this a public facing message if there's a start failure
             print(f"Failed to start game: {msg}")
             await interaction.send(f"Failed to start game: {msg}")
+            self._server_task.cancel()
             return
 
         await interaction.send(f"Starting the game!")
@@ -358,11 +380,18 @@ class Lobby:
         for user in self.users:
             self._input_controller.add_panel(user, debug=self.is_lobby_host(user))
 
-        self._driver = DiscordDriver(self.bulletin, self._interaction_cache, self._input_controller)
-        self._messenger = Messenger(self._game, self._driver)
+        self._discord_driver = DiscordDriver(self.bulletin, self._interaction_cache, self._input_controller)
+        self._webhook_driver = WebhookDriver(self.bulletin)
+        print("Setting up Webhook")
+        await self._webhook_driver.setup_webhook()
+        print("Done setting up Webhook")
+        self._bot_driver = BotMessageDriver()
+        self._messenger = Messenger(self._game, self._discord_driver, self._bot_driver, self._webhook_driver)
+        self._messenger.start_inbound()
         self._game.messenger = self._messenger
-
-        self._view_controller = ViewController(self._input_controller, self._driver, self._interaction_cache)
+        self._message_forwarding = ForwardChatMessages(self._router, self._bot_driver, self._game, self.bulletin)
+        self._message_forwarding.enable_forwarding()
+        self._view_controller = ViewController(self._input_controller, self._discord_driver, self._interaction_cache)
         self._game.tribunal.view_controller = self._view_controller
 
         await self.drive_updates()
