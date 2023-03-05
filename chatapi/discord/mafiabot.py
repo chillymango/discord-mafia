@@ -210,10 +210,7 @@ def main() -> None:
     ```"""
             await interaction.send(content=teststr)
         elif command == "print-msg":
-            async def print_msg(msg: "disnake.Message") -> None:
-                import pdb; pdb.set_trace()
-                print(msg)
-            router.register_message_callback(interaction.channel.name, print_msg)
+            #router.register_message_callback(interaction.channel.name, print_msg)
             await interaction.send("i'm printing messages")
         elif lobby is None or lobby.state in (LobbyState.OPEN, LobbyState.CLOSED):
             await lobby_subparser(interaction.user, interaction, command, args)
