@@ -12,12 +12,15 @@ from chatapi.discord.driver import WebhookDriver
 from chatapi.discord.forward import ForwardChatMessages
 from chatapi.discord.input_panel import InputPanel
 from chatapi.discord.input_panel import InputController
+from chatapi.discord.panel import LobbyPanel
+from chatapi.discord.router import router
 from chatapi.discord.view import ViewController
 from engine.message import Messenger
 from engine.game import Game
 from engine.phase import TurnPhase
 from engine.player import Player
 from engine.role.base import RoleFactory
+from engine.session import Session
 from engine.setup import do_setup
 from engine.setup import EXAMPLE_CONFIG
 from engine.stepper import sleep_override
@@ -380,11 +383,9 @@ class Lobby:
         for user in self.users:
             self._input_controller.add_panel(user, debug=self.is_lobby_host(user))
 
-        self._discord_driver = DiscordDriver(self.bulletin, self._interaction_cache, self._input_controller)
+        self._discord_driver = DiscordDriver(self.bulletin)
         self._webhook_driver = WebhookDriver(self.bulletin)
-        print("Setting up Webhook")
         await self._webhook_driver.setup_webhook()
-        print("Done setting up Webhook")
         self._bot_driver = BotMessageDriver()
         self._messenger = Messenger(self._game, self._discord_driver, self._bot_driver, self._webhook_driver)
         self._messenger.start_inbound()
@@ -404,3 +405,124 @@ class Lobby:
             # process game loop step
             await self._stepper.step()
             await self._view_controller.drive()
+
+
+class NewLobby:
+    """
+    Uhhh yeah the old one's got a bunch of cruft since I just hacked things
+    where they fit
+    """
+
+    def __init__(self, guild: "disnake.Guild", channel: "disnake.TextChannel",  debug: bool = False):
+        self._channel = channel
+        self._guild = guild
+        self._debug = debug
+        self.users: T.List[T.Union["disnake.User", "BotUser"]] = list()
+        self.players: T.Dict[T.Union["disnake.User", "BotUser"], Player] = dict()
+        self.panel = LobbyPanel(self._channel, self.users, debug=debug)
+
+        self.state = LobbyState.OPEN
+
+        self._session = None
+
+        self._register_callbacks()
+
+    def _register_callbacks(self) -> None:
+        #self._router.register_button_custom_callback("advance_game", self.debug_advance_game)
+        router.register_button_custom_callback("join", self.add_player)
+        router.register_button_custom_callback("leave", self.remove_player)
+        router.register_button_custom_callback("start", self.start_game)
+        router.register_button_custom_callback("close", self.close_lobby)
+        router.register_button_custom_callback("add_bot", self.add_bot)
+        router.register_button_custom_callback("remove_bot", self.remove_bot)
+
+    async def add_player(self, interaction: "disnake.Interaction") -> None:
+        user = interaction.user
+        if user in self.users:
+            await interaction.send("Already in lobby", ephemeral=True, delete_after=5.0)
+        else:
+            self.users.append(user)
+            if user not in self.players:
+                self.players[user] = Player.create_from_user(user)
+            await interaction.send(
+                "You have successfully joined the lobby.",
+                ephemeral=True,
+                delete_after=5.0
+            )
+            await self.panel.drive()
+
+    async def remove_player(self, interaction: "disnake.Interaction") -> None:
+        user = interaction.user
+        if user not in self.users:
+            await interaction.send("Not in lobby", ephemeral=True, delete_after=5.0)
+        else:
+            self.users.remove(user)
+            player = self.players[user]
+
+            await interaction.send("You have successfully left the lobby", ephemeral=True)
+            await self.panel.drive()
+
+    async def start_game(self, interaction: "disnake.Interaction") -> None:
+        # TODO: add support to specify config
+        self._session = Session(self._guild)
+        players = []
+        for user in self.users:
+            if self.players.get(user):
+                players.append(self.players[user])
+            else:
+                if isinstance(user, BotUser):
+                    players.append(Player.create_from_bot(user))
+                else:
+                    players.append(Player.create_from_user(user))
+        
+        self._session.add_players(*players)
+        try:
+            await interaction.send("Game started!")
+        except:
+            await interaction.followup("Game started! Wtf")
+        await self.panel.delete()
+
+        # this just blocks until the game ends
+        self.state = LobbyState.STARTED
+        await self._session.start()
+
+    async def close_lobby(self, interaction: "disnake.Interaction") -> None:
+        self.state = LobbyState.CLOSED
+        await interaction.send("Closing lobby")
+        await self.panel.delete()
+
+    async def add_bot(self, interaction: "disnake.Interaction") -> None:
+        """
+        Add a fake bot player, add to 15 for testing I guess
+        """
+        bots_to_add = 15 - len(self.users)
+        for _ in range(bots_to_add):
+            name = BOT_NAMES.pop()
+            bot_user = BotUser(name)
+            self.users.append(bot_user)
+        await self.panel.drive(issue=False)
+        await interaction.send(f"Added bot players", ephemeral=True, delete_after=0.0)
+
+    async def remove_bot(self, interaction: "disnake.Interaction") -> None:
+        """
+        Remove a fake bot player
+        """
+        # remove from bot list and roster
+        removed = self.bots.pop()
+        self.roster.remove(removed)
+
+        # recycle name into bot pool
+        removed_name = removed.name
+        BOT_NAMES.add(removed_name)
+
+        # re-render
+        await self.update_lobby()
+        await interaction.send(f"Removed bot {removed_name}", ephemeral=True, delete_after=10.0)
+
+    @property
+    def bots(self) -> T.List["BotUser"]:
+        return [user for user in self.users if isinstance(user, BotUser)]
+
+    @property
+    def humans(self) -> T.List["disnake.User"]:
+        return [user for user in self.users if isinstance(user, disnake.User)]

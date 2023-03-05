@@ -100,6 +100,18 @@ class Actor:
         self._attacked_by = []
 
     @property
+    def epitaph(self) -> str:
+        """
+        Return the kill report text for the primary action.
+        """
+        if not self._attacked_by:
+            return "Unable to determine cause of death (BUG)"
+        primary = self._attacked_by[0].kill_report_text()
+        if len(self._attacked_by) > 1:
+            primary += ". After that, they were attacked again."
+        return primary
+
+    @property
     def was_attacked(self) -> bool:
         return len(self._attacked_by) > 0
 
@@ -278,6 +290,9 @@ class Actor:
     def kill(self) -> None:
         print(f"Killed {self}")
         self._is_alive = False
+        # NOTE: we should be able to generate tombstone here since all protective
+        # actions should act *before* kills take place
+        self._game.update_graveyard(self)
 
     @property
     def player(self) -> "Player":

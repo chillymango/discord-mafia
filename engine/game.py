@@ -2,6 +2,7 @@ import asyncio
 import random
 import typing as T
 from collections import defaultdict
+from dataclasses import dataclass
 
 from engine.actor import Actor
 from engine.affiliation import MAFIA
@@ -18,6 +19,14 @@ if T.TYPE_CHECKING:
     from engine.tribunal import Tribunal
 
 
+@dataclass
+class Tombstone:
+    actor: Actor
+    turn_phase: TurnPhase
+    turn_number: int
+    epitaph: str
+
+
 class Game:
 
     def __init__(self, config: T.Dict[str, T.Any] = None):
@@ -31,6 +40,7 @@ class Game:
 
         self._messenger: T.Optional[Messenger] = None
         self._kill_report = KillReport()
+        self._graveyard: T.List[Tombstone] = list()
 
         # these are general rules. Some roles can override (e.g blackmailer)
         self._allow_chat = False
@@ -97,6 +107,19 @@ class Game:
             print(message)
         else:
             self._messenger.announce(message)
+
+    def update_graveyard(self, actor: "Actor") -> None:
+        """
+        This should get called whenever `kill` is called.
+        """
+        self._graveyard.append(Tombstone(actor, self._turn_phase.name, self._turn_number, actor.epitaph))
+
+    @property
+    def graveyard(self) -> T.List["Tombstone"]:
+        """
+        An ordered list of tombstones. These should be ordered with age (oldest first).
+        """
+        return self._graveyard
 
     @property
     def concluded(self) -> bool:

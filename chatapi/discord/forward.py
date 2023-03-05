@@ -3,6 +3,7 @@ Message forwarding to bot queues
 """
 import typing as T
 
+from chatapi.discord.router import router
 from engine.message import Message
 
 if T.TYPE_CHECKING:
@@ -21,12 +22,10 @@ class ForwardChatMessages:
 
     def __init__(
         self,
-        router: "Router",
         driver: "BotMessageDriver",
         game: "Game",
         channel: "disnake.TextChannel",
     ):
-        self._router = router
         self._driver = driver
         self._game = game
         self._channel = channel
@@ -46,10 +45,10 @@ class ForwardChatMessages:
 
         These should all be listed as public queue messages.
         """
-        self._router.register_message_callback(self.channel.name, self.do_forward)
+        router.register_message_callback(self.channel.name, self.do_forward)
 
     def disable_forwarding(self) -> None:
-        self._router.unregister_message_callback(self.channel.name, self.do_forward)
+        router.unregister_message_callback(self.channel.name, self.do_forward)
 
     async def do_forward(self, message: "disnake.Message") -> None:
         """

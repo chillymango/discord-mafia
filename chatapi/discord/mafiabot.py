@@ -14,10 +14,12 @@ import disnake
 from chatapi.app import app
 from chatapi.app.server import run_app_and_bot
 from chatapi.app.grpc.api import GrpcBotApi
+from chatapi.discord.icache import icache
 from chatapi.discord.name import NameChanger
-from chatapi.discord.router import Router
+from chatapi.discord.router import router
 from chatapi.discord.lobby import Lobby
 from chatapi.discord.lobby import LobbyState
+from chatapi.discord.lobby import NewLobby
 from engine.game import Game
 from engine.player import Player
 from engine.phase import GamePhase
@@ -85,10 +87,12 @@ lobby_manager: T.Dict[disnake.Guild, Lobby] = dict()
 
 def main() -> None:
     bot = MafiaBot()
-    router = Router()
     bot.add_listener(router.on_button_click)
     bot.add_listener(router.on_string_select, name="on_dropdown")
     bot.add_listener(router.on_message)
+
+    router.register_button_general_callback(icache.update_with_interaction)
+    router.register_string_general_callback(icache.update_with_interaction)
 
     async def lobby_subparser(player: "Player", interaction, command: str, args: str) -> None:
         global bot
@@ -101,8 +105,8 @@ def main() -> None:
                     )
                     return
             try:
-                lobby = Lobby(router, debug=True)
-                await lobby.open_lobby(interaction)
+                #lobby = Lobby(router, debug=True)
+                lobby = NewLobby(interaction.guild, interaction.channel, debug=True)
                 lobby_manager[interaction.guild] = lobby
             except BaseException:  # if creation fails, do not block another re-attempt
                 lobby_manager.pop(interaction.guild)

@@ -4,6 +4,8 @@ import typing as T
 from collections import defaultdict
 from collections import deque
 import disnake
+
+from chatapi.discord.icache import icache
 from engine.message import InboundMessageDriver
 from engine.message import MessageDriver
 from engine.message import OutboundMessageDriver
@@ -155,12 +157,8 @@ class DiscordDriver(OutboundMessageDriver):
     def __init__(
         self,
         pub_channel: "disnake.TextChannel",
-        interaction_cache: T.Dict["disnake.User", "disnake.Interaction"],
-        controller: "InputController"
     ) -> None:
         self._pub_channel = pub_channel
-        self._interaction_cache = interaction_cache
-        self._controller = controller
 
         self._public_queue: T.Deque["Message"] = deque()
         self._private_queues: T.Dict["Player", T.Deque["Message"]] = defaultdict(deque)
@@ -198,7 +196,7 @@ class DiscordDriver(OutboundMessageDriver):
             print(f"Empty message?")
             return
 
-        for user, interaction in self._interaction_cache.items():
+        for user, interaction in icache.items():
             if user.name == player.name:
                 break
         else:
@@ -220,7 +218,7 @@ class DiscordDriver(OutboundMessageDriver):
         """
         Edit the previously issued private message sent to a player
         """
-        for user, interaction in self._interaction_cache.items():
+        for user, interaction in icache.items():
             if user.name == player.name:
                 break
         else:

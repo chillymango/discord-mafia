@@ -5,6 +5,8 @@ Er I mean it is
 
 This is something that's got access to both what's generating the state for the UI as well
 as what propagates the changes out to the client.
+
+TODO: i think this can be replaced by the new Panel abstraction
 """
 import asyncio
 import typing as T

@@ -118,3 +118,6 @@ class Router:
 
     async def on_button_click(self, interaction: "disnake.Interaction") -> None:
         await self.on_interact(self._button_router, interaction)
+
+
+router = Router()
