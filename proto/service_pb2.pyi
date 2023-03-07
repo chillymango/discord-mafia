@@ -1,3 +1,4 @@
+import command_pb2 as _command_pb2
 import connect_pb2 as _connect_pb2
 import message_pb2 as _message_pb2
 import state_pb2 as _state_pb2

@@ -4,7 +4,10 @@ import typing as T
 
 from chatapi.discord.driver import BotMessageDriver
 from chatapi.discord.webhook import don_bot_message
+from engine.actor import Actor
 from engine.message import Message
+from engine.message import MessageType
+from proto import command_pb2
 from proto import service_pb2_grpc
 from proto import connect_pb2
 from proto import message_pb2
@@ -119,14 +122,82 @@ class GrpcBotApi(service_pb2_grpc.GrpcBotApiServicer):
             # ordering between public / private doesn't matter
             # get all the messages we can
             msgs = []
-            while not self.driver._private_grpc_queues[bot].empty():
-                msgs.append(self.driver._private_grpc_queues[bot].get_nowait())
+            while not self.driver._queue.empty():
+                game_msg = self.driver._queue.get_nowait()
+                # make the message proto
+                if game_msg.message_type in (
+                    MessageType.ANNOUNCEMENT,
+                    MessageType.NIGHT_SEQUENCE,
+                    MessageType.INDICATOR
+                ):
+                    source = message_pb2.Message.GAME
+                elif game_msg.message_type in (
+                    MessageType.BOT_PUBLIC_MESSAGE,
+                    MessageType.PLAYER_PUBLIC_MESSAGE
+                ):
+                    source = message_pb2.Message.PUBLIC
+                elif game_msg.message_type in (
+                    MessageType.PRIVATE_FEEDBACK,
+                    MessageType.PRIVATE_MESSAGE,
+                ):
+                    source = message_pb2.Message.PRIVATE
+                else:
+                    # default to game message
+                    print(f"WARNING: unhandled message type {game_msg.message_type}. "
+                           "Defaulting to GAME.")
+                    source = message_pb2.Message.GAME
+
+                proto_msg = message_pb2.Message(
+                    timestamp=time.time(),
+                    source=source,
+                    message=str(game_msg),
+                )
+
+                msgs.append(proto_msg)
+
             response = message_pb2.SubscribeMessagesResponse(timestamp=time.time(), messages=msgs)
+
             yield response
-        print("Ok this actually worked? Wait do we even need this lol I thought it dies just fine")
 
     def SendMessage(self, request: message_pb2.SendMessageRequest, context) -> message_pb2.SendMessageResponse:
         # this is where the fun begins?
         bot = self.get_bot(request.bot_id)
         self._bot_api.public_message(bot.id, request.message.message)
         return message_pb2.SendMessageResponse(timestamp=time.time(), success=True)
+
+    def submit_target(self, request: command_pb2.TargetRequest, api_call: T.Callable) -> command_pb2.TargetResponse:
+        print("\tSubmitting target")
+        bot = self.get_bot(request.bot_id)
+        bot_actor = self._bot_api.game.get_actor_by_name(bot.name)
+        print("\tGot actor")
+        voted_actor = self._bot_api.game.get_actor_by_name(request.target_name)
+        print("\tGot target")
+        api_call(bot_actor, voted_actor)
+        print("\tMade call")
+        return command_pb2.TargetResponse(timestamp=time.time())
+
+    def TrialVote(self, request: command_pb2.TargetRequest, context) -> command_pb2.TargetResponse:
+        return self.submit_target(request, self._bot_api.game.tribunal.submit_trial_vote)
+
+    def LynchVote(self, request: command_pb2.BoolVoteRequest, context) -> command_pb2.BoolVoteResponse:
+        bot = self.get_bot(request.bot_id)
+        bot_actor = self._bot_api.game.get_actor_by_name(bot.name)
+        self._bot_api.game.tribunal.submit_lynch_vote(bot_actor, request.vote)
+        return command_pb2.TargetResponse(timestamp=time.time())
+
+    def SkipVote(self, request: command_pb2.BoolVoteRequest, context) -> command_pb2.BoolVoteResponse:
+        bot = self.get_bot(request.bot_id)
+        bot_actor = self._bot_api.game.get_actor_by_name(bot.name)
+        self._bot_api.game.tribunal.submit_skip_vote(bot_actor, request.vote)
+        return command_pb2.TargetResponse(timestamp=time.time())
+
+    def DayTarget(self, request: command_pb2.BoolVoteRequest, context) -> command_pb2.BoolVoteResponse:
+        return self.submit_target(request, Actor.choose_targets)
+
+    def NightTarget(self, request: command_pb2.BoolVoteRequest, context) -> command_pb2.BoolVoteResponse:
+        return self.submit_target(request, Actor.choose_targets)
+
+
+# TODO: split this by game eventually, but
+# it must be accessible early by bot
+api: GrpcBotApi = GrpcBotApi()

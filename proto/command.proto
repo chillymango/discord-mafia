@@ -1,2 +1,32 @@
 // Bot issues commands from client to server
 syntax = "proto3";
+
+message TargetRequest {
+    // timestamp at which the response was issued
+    float timestamp = 1;
+
+    // unique identifier
+    string bot_id = 2;
+
+    // name of person to vote for
+    string target_name = 3;
+}
+
+message TargetResponse {
+    float timestamp = 1;
+}
+
+message BoolVoteRequest {
+    // timestamp at which the response was issued
+    float timestamp = 1;
+
+    // unique identifier
+    string bot_id = 2;
+
+    // yes = true, no = false, abstain = null
+    bool vote = 3;
+}
+
+message BoolVoteResponse {
+    float timestamp = 1;
+}

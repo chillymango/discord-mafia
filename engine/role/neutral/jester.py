@@ -1,6 +1,10 @@
+import typing as T
+
 from engine.action.annoy import Annoy
 from engine.action.base import ActionSequence
 from engine.role.neutral import NeutralRole
+from engine.wincon import WinCondition
+from engine.wincon import JesterWin
 
 
 class Jester(NeutralRole):
@@ -14,6 +18,10 @@ class Jester(NeutralRole):
         the ChatGPT prompt as part of input tuning.
         """
         return "A lunatic whose life's goal is to be publicly executed."
+
+    @classmethod
+    def win_condition(cls) -> T.Type[WinCondition]:
+        return JesterWin
 
     @classmethod
     def day_action_description(cls) -> str:

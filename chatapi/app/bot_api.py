@@ -8,27 +8,27 @@ import typing as T
 
 from chatapi.discord.driver import DiscordDriver
 from chatapi.discord.driver import WebhookDriver
+from engine.message import Message
 
 if T.TYPE_CHECKING:
     from chatapi.app.bot import BotUser
     from engine.actor import Actor
     from engine.game import Game
+    from engine.message import Messenger
 
 
 class BotApi:
     """
     Supports interacting with a game object.
 
-    Wait why don't we just make a game API object in general...
+    TODO: calling the bot API from gRPC runs into some event loop bullshit, where
+    gRPC seems to think that the primary loop isn't running. My guess is that it's
+    due to the fact that the gRPC implementation probably uses a different underlying
+    event loop, but I'm not totally sure. In any case, after putting both servers on
+    the same loop, we're still unable to call the right methods.
 
-    Bot programs should follow this procedure:
-    1. Request a bot ID. If there's no bot ID it should just stop.
-        This request should come with a server bind for our API to plug
-        back into in order to send traffic the other way.
-    2. Bot API should assign this ID. Respond to the request with information
-        like bot name, bot role, etc.
-        Fuck it I should really learn gRPC.
-    3. 
+    Unfortunately I think what we'll have to do is have the API synchronously queue
+    messages / state changes up from here and then get dumped out.
     """
 
     def __init__(self, game: "Game") -> None:
@@ -43,12 +43,8 @@ class BotApi:
         return self._game
 
     @property
-    def discord_driver(self) -> "DiscordDriver":
-        return self._game.messenger.get_driver_by_class(DiscordDriver)
-
-    @property
-    def webhook_driver(self) -> "WebhookDriver":
-        return self._game.messenger.get_driver_by_class(WebhookDriver)
+    def messenger(self) -> "Messenger":
+        return self._game.messenger
 
     @property
     def free_bots(self) -> T.Set["BotUser"]:
@@ -64,6 +60,14 @@ class BotApi:
             if bot.id == bot_id:
                 return bot
         return None
+
+    def prune(self) -> None:
+        to_remove = list()
+        for bot, actor in self._bots.items():
+            if not actor.is_alive:
+                to_remove.append(bot)
+        for _bot in to_remove:
+            self._bots.pop(_bot)
 
     def check_out_bot(self, bot_name: str = None) -> T.Optional["BotUser"]:
         """
@@ -84,8 +88,12 @@ class BotApi:
             bot = self.free_bots.pop()
             if bot is None:
                 return None
-        self._reservations.add(bot)
-        return bot
+
+        if bot is not None:
+            self._reservations.add(bot)
+            return bot
+
+        return None
 
     def check_in_bot(self, bot_name: str) -> bool:
         """
@@ -117,10 +125,17 @@ class BotApi:
         If the chat is closed at the moment, this will be dropped.
         """
         bot = self.get_bot_by_id(bot_id)
-        # use synchronous method to queue up our message
-        self.webhook_driver.queue_publish_webhook(bot.name, msg)
+        actor = self._game.get_actor_by_name(bot.name, raise_if_missing=True)
+        self.messenger.queue_message(Message.bot_public_message(actor, msg))
 
     def private_message(self, bot_id: str, target_name: str, msg: str) -> None:
         """
         Issue a private message to the person with specified name.
+        """
+
+    def trial_vote(self, bot_id: str, target_name: str) -> None:
+        """
+        Put someone on trial.
+
+        I guess we could use the Webhook driver instaed of the Discord driver?
         """

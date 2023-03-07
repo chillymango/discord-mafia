@@ -1,6 +1,12 @@
 """
 Run the app in production mode?
 """
+import asyncio
+import platform
+if platform.system()=='Windows':
+    # what the fuck?
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import typing as T
 from grpc import aio
 
@@ -24,8 +30,8 @@ async def run_grpc_server(game: "Game", bind=BIND):
     server = aio.server()
     service_pb2_grpc.add_GrpcBotApiServicer_to_server(api, server)
     server.add_insecure_port(bind)
-    print("gRPC server start")
     try:
+        print("gRPC server start")
         await server.start()
     finally:
         async def server_graceful_shutdown():

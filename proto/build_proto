@@ -9,3 +9,6 @@ python -m grpc_tools.protoc -Iproto --python_out=proto --pyi_out=proto --grpc_py
 
 # build service
 python -m grpc_tools.protoc -Iproto --python_out=proto --pyi_out=proto --grpc_python_out=proto proto\service.proto
+
+# build command
+python -m grpc_tools.protoc -Iproto --python_out=proto --pyi_out=proto --grpc_python_out=proto proto\command.proto

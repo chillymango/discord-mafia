@@ -12,14 +12,17 @@ from grpc import aio
 import disnake
 
 from chatapi.app import app
+from chatapi.app.bot_api import BotApi
 from chatapi.app.server import run_app_and_bot
+from chatapi.app.grpc.api import api
 from chatapi.app.grpc.api import GrpcBotApi
+from chatapi.discord.channel import channel_manager
 from chatapi.discord.icache import icache
 from chatapi.discord.name import NameChanger
 from chatapi.discord.router import router
-from chatapi.discord.lobby import Lobby
 from chatapi.discord.lobby import LobbyState
 from chatapi.discord.lobby import NewLobby
+from chatapi.discord.permissions import ALL_ROLES
 from engine.game import Game
 from engine.player import Player
 from engine.phase import GamePhase
@@ -45,8 +48,10 @@ _cleanup_coroutines = []
 
 
 # TODO: why the fuck is this so gross
-grpc_api = GrpcBotApi()
+#grpc_api = GrpcBotApi()
 name_changer: NameChanger = None
+
+BIND = 'localhost:50051'
 
 
 class MafiaBot(commands.Bot):
@@ -55,11 +60,26 @@ class MafiaBot(commands.Bot):
         intents.message_content = True
         super().__init__(command_prefix=commands.when_mentioned_or('/'), intents=intents)
 
+    async def start(self, *args, **kwargs) -> None:
+        """
+        Before we start the bot, add gRPC into the loop
+        """
+        global api
+        self._api = api
+        self._server = aio.server()
+        service_pb2_grpc.add_GrpcBotApiServicer_to_server(api, self._server)
+        self._server.add_insecure_port(BIND)
+        await asyncio.gather(
+            super().start(*args, **kwargs),
+            self._server.start()
+        )
+        #super().start(*args, **kwargs)
+
     async def on_ready(self):
         print(f'Logged in as {self.user} (ID: {self.user.id})')
         print('------')
 
-    async def close_lobby(self, lobby: "Lobby") -> None:
+    async def close_lobby(self, lobby: "NewLobby") -> None:
         try:
             await lobby.close_lobby()
         except:
@@ -69,7 +89,11 @@ class MafiaBot(commands.Bot):
         print("Shutting down server")
         await asyncio.gather(*[
             self.close_lobby(lobby) for lobby in lobby_manager.values() if lobby.state != LobbyState.CLOSED
+        ] + [
+            channel_manager.shutdown()
         ])
+        print("Deleting all added roles")
+        await asyncio.gather(*[role.delete() for role in ALL_ROLES])
         # TODO: graceful shutdown
         await super().close()
 
@@ -82,7 +106,7 @@ class FakeUser:
     """
 
 
-lobby_manager: T.Dict[disnake.Guild, Lobby] = dict()
+lobby_manager: T.Dict[disnake.Guild, NewLobby] = dict()
 
 
 def main() -> None:
@@ -105,8 +129,8 @@ def main() -> None:
                     )
                     return
             try:
-                #lobby = Lobby(router, debug=True)
-                lobby = NewLobby(interaction.guild, interaction.channel, debug=True)
+                game_channel = await channel_manager.create_channel(interaction.guild, "mafia-bulletin")
+                lobby = NewLobby(interaction.guild, game_channel, debug=True)
                 lobby_manager[interaction.guild] = lobby
             except BaseException:  # if creation fails, do not block another re-attempt
                 lobby_manager.pop(interaction.guild)

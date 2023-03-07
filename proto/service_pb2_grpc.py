@@ -2,6 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
+import proto.command_pb2 as command__pb2
 import proto.connect_pb2 as connect__pb2
 import proto.message_pb2 as message__pb2
 import proto.state_pb2 as state__pb2
@@ -46,6 +47,31 @@ class GrpcBotApiStub(object):
                 request_serializer=message__pb2.SendMessageRequest.SerializeToString,
                 response_deserializer=message__pb2.SendMessageResponse.FromString,
                 )
+        self.TrialVote = channel.unary_unary(
+                '/GrpcBotApi/TrialVote',
+                request_serializer=command__pb2.TargetRequest.SerializeToString,
+                response_deserializer=command__pb2.TargetResponse.FromString,
+                )
+        self.LynchVote = channel.unary_unary(
+                '/GrpcBotApi/LynchVote',
+                request_serializer=command__pb2.BoolVoteRequest.SerializeToString,
+                response_deserializer=command__pb2.BoolVoteResponse.FromString,
+                )
+        self.SkipVote = channel.unary_unary(
+                '/GrpcBotApi/SkipVote',
+                request_serializer=command__pb2.BoolVoteRequest.SerializeToString,
+                response_deserializer=command__pb2.BoolVoteResponse.FromString,
+                )
+        self.DayTarget = channel.unary_unary(
+                '/GrpcBotApi/DayTarget',
+                request_serializer=command__pb2.TargetRequest.SerializeToString,
+                response_deserializer=command__pb2.TargetResponse.FromString,
+                )
+        self.NightTarget = channel.unary_unary(
+                '/GrpcBotApi/NightTarget',
+                request_serializer=command__pb2.TargetRequest.SerializeToString,
+                response_deserializer=command__pb2.TargetResponse.FromString,
+                )
 
 
 class GrpcBotApiServicer(object):
@@ -87,6 +113,36 @@ class GrpcBotApiServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def TrialVote(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def LynchVote(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SkipVote(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DayTarget(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def NightTarget(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GrpcBotApiServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -119,6 +175,31 @@ def add_GrpcBotApiServicer_to_server(servicer, server):
                     servicer.SendMessage,
                     request_deserializer=message__pb2.SendMessageRequest.FromString,
                     response_serializer=message__pb2.SendMessageResponse.SerializeToString,
+            ),
+            'TrialVote': grpc.unary_unary_rpc_method_handler(
+                    servicer.TrialVote,
+                    request_deserializer=command__pb2.TargetRequest.FromString,
+                    response_serializer=command__pb2.TargetResponse.SerializeToString,
+            ),
+            'LynchVote': grpc.unary_unary_rpc_method_handler(
+                    servicer.LynchVote,
+                    request_deserializer=command__pb2.BoolVoteRequest.FromString,
+                    response_serializer=command__pb2.BoolVoteResponse.SerializeToString,
+            ),
+            'SkipVote': grpc.unary_unary_rpc_method_handler(
+                    servicer.SkipVote,
+                    request_deserializer=command__pb2.BoolVoteRequest.FromString,
+                    response_serializer=command__pb2.BoolVoteResponse.SerializeToString,
+            ),
+            'DayTarget': grpc.unary_unary_rpc_method_handler(
+                    servicer.DayTarget,
+                    request_deserializer=command__pb2.TargetRequest.FromString,
+                    response_serializer=command__pb2.TargetResponse.SerializeToString,
+            ),
+            'NightTarget': grpc.unary_unary_rpc_method_handler(
+                    servicer.NightTarget,
+                    request_deserializer=command__pb2.TargetRequest.FromString,
+                    response_serializer=command__pb2.TargetResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -229,5 +310,90 @@ class GrpcBotApi(object):
         return grpc.experimental.unary_unary(request, target, '/GrpcBotApi/SendMessage',
             message__pb2.SendMessageRequest.SerializeToString,
             message__pb2.SendMessageResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def TrialVote(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/GrpcBotApi/TrialVote',
+            command__pb2.TargetRequest.SerializeToString,
+            command__pb2.TargetResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def LynchVote(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/GrpcBotApi/LynchVote',
+            command__pb2.BoolVoteRequest.SerializeToString,
+            command__pb2.BoolVoteResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def SkipVote(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/GrpcBotApi/SkipVote',
+            command__pb2.BoolVoteRequest.SerializeToString,
+            command__pb2.BoolVoteResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def DayTarget(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/GrpcBotApi/DayTarget',
+            command__pb2.TargetRequest.SerializeToString,
+            command__pb2.TargetResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def NightTarget(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/GrpcBotApi/NightTarget',
+            command__pb2.TargetRequest.SerializeToString,
+            command__pb2.TargetResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

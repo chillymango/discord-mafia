@@ -5,6 +5,7 @@ in a single game.
 import typing as T
 
 from engine.action.base import TargetGroup
+from engine.action.lynch import Lynch
 from engine.affiliation import MAFIA
 from engine.affiliation import NEUTRAL
 from engine.affiliation import TOWN
@@ -89,6 +90,7 @@ class Actor:
         actor = state_pb2.Actor(
             player=self.player.to_proto(),
             role=self.role.to_proto(),
+            is_alive=self.is_alive,
         )
         return actor
 
@@ -280,12 +282,19 @@ class Actor:
     def name(self) -> str:
         return self._player.name
 
-    @property
+    @classmethod
     def affiliation(self) -> str:
         """
         Get the actor's affiliation. This may change if role changes (e.g amnesiac)
         """
-        return self._role.affiliation
+        return self._role.affiliation()
+
+    def lynch(self) -> None:
+        """
+        Add the lynch action and then execute a kill
+        """
+        self._attacked_by = [Lynch]
+        self.kill()
 
     def kill(self) -> None:
         print(f"Killed {self}")

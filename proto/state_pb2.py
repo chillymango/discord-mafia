@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bstate.proto\"8\n\x06Player\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0e\n\x06is_bot\x18\x02 \x01(\x08\x12\x10\n\x08is_human\x18\x03 \x01(\x08\"_\n\x04Role\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x61\x66\x66iliation\x18\x02 \x01(\t\x12\x18\n\x10role_description\x18\x03 \x01(\t\x12\x1a\n\x12\x61\x63tion_description\x18\x04 \x01(\t\"5\n\x05\x41\x63tor\x12\x17\n\x06player\x18\x01 \x01(\x0b\x32\x07.Player\x12\x13\n\x04role\x18\x02 \x01(\x0b\x32\x05.Role\"\x97\x01\n\x04Game\x12\x12\n\ngame_phase\x18\x01 \x01(\t\x12\x12\n\nturn_phase\x18\x02 \x01(\t\x12\x13\n\x0bturn_number\x18\x03 \x01(\x05\x12\x16\n\x06\x61\x63tors\x18\x04 \x03(\x0b\x32\x06.Actor\x12\x1d\n\tgraveyard\x18\x05 \x03(\x0b\x32\n.Tombstone\x12\x1b\n\x08tribunal\x18\x06 \x01(\x0b\x32\t.Tribunal\"5\n\tTombstone\x12\x17\n\x06player\x18\x01 \x01(\x0b\x32\x07.Player\x12\x0f\n\x07\x65pitaph\x18\x02 \x01(\t\"3\n\tVoteCount\x12\x17\n\x06player\x18\x01 \x01(\x0b\x32\x07.Player\x12\r\n\x05\x63ount\x18\x02 \x01(\x05\"o\n\x08Tribunal\x12\r\n\x05state\x18\x01 \x01(\t\x12\x1f\n\x0btrial_votes\x18\x02 \x03(\x0b\x32\n.VoteCount\x12\x1f\n\x0blynch_votes\x18\x03 \x03(\x0b\x32\n.VoteCount\x12\x12\n\nskip_votes\x18\x04 \x01(\x05\"3\n\x0eGetGameRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\"9\n\x0fGetGameResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x13\n\x04game\x18\x02 \x01(\x0b\x32\x05.Game\"[\n\x0fGetActorRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x10\n\x06\x62ot_id\x18\x02 \x01(\tH\x00\x12\x15\n\x0bplayer_name\x18\x03 \x01(\tH\x00\x42\x0c\n\nidentifier\"<\n\x10GetActorResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x15\n\x05\x61\x63tor\x18\x02 \x01(\x0b\x32\x06.Actor2j\n\x05State\x12.\n\x07GetGame\x12\x0f.GetGameRequest\x1a\x10.GetGameResponse\"\x00\x12\x31\n\x08GetActor\x12\x10.GetActorRequest\x1a\x11.GetActorResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bstate.proto\"8\n\x06Player\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0e\n\x06is_bot\x18\x02 \x01(\x08\x12\x10\n\x08is_human\x18\x03 \x01(\x08\"_\n\x04Role\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x61\x66\x66iliation\x18\x02 \x01(\t\x12\x18\n\x10role_description\x18\x03 \x01(\t\x12\x1a\n\x12\x61\x63tion_description\x18\x04 \x01(\t\"G\n\x05\x41\x63tor\x12\x17\n\x06player\x18\x01 \x01(\x0b\x32\x07.Player\x12\x13\n\x04role\x18\x02 \x01(\x0b\x32\x05.Role\x12\x10\n\x08is_alive\x18\x03 \x01(\x08\"\x97\x01\n\x04Game\x12\x12\n\ngame_phase\x18\x01 \x01(\t\x12\x12\n\nturn_phase\x18\x02 \x01(\t\x12\x13\n\x0bturn_number\x18\x03 \x01(\x05\x12\x16\n\x06\x61\x63tors\x18\x04 \x03(\x0b\x32\x06.Actor\x12\x1d\n\tgraveyard\x18\x05 \x03(\x0b\x32\n.Tombstone\x12\x1b\n\x08tribunal\x18\x06 \x01(\x0b\x32\t.Tribunal\"5\n\tTombstone\x12\x17\n\x06player\x18\x01 \x01(\x0b\x32\x07.Player\x12\x0f\n\x07\x65pitaph\x18\x02 \x01(\t\"3\n\tVoteCount\x12\x17\n\x06player\x18\x01 \x01(\x0b\x32\x07.Player\x12\r\n\x05\x63ount\x18\x02 \x01(\x05\"o\n\x08Tribunal\x12\r\n\x05state\x18\x01 \x01(\t\x12\x1f\n\x0btrial_votes\x18\x02 \x03(\x0b\x32\n.VoteCount\x12\x1f\n\x0blynch_votes\x18\x03 \x03(\x0b\x32\n.VoteCount\x12\x12\n\nskip_votes\x18\x04 \x01(\x05\"3\n\x0eGetGameRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\"9\n\x0fGetGameResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x13\n\x04game\x18\x02 \x01(\x0b\x32\x05.Game\"[\n\x0fGetActorRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x10\n\x06\x62ot_id\x18\x02 \x01(\tH\x00\x12\x15\n\x0bplayer_name\x18\x03 \x01(\tH\x00\x42\x0c\n\nidentifier\"<\n\x10GetActorResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x15\n\x05\x61\x63tor\x18\x02 \x01(\x0b\x32\x06.Actorb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'state_pb2', globals())
@@ -25,23 +25,21 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _ROLE._serialized_start=73
   _ROLE._serialized_end=168
   _ACTOR._serialized_start=170
-  _ACTOR._serialized_end=223
-  _GAME._serialized_start=226
-  _GAME._serialized_end=377
-  _TOMBSTONE._serialized_start=379
-  _TOMBSTONE._serialized_end=432
-  _VOTECOUNT._serialized_start=434
-  _VOTECOUNT._serialized_end=485
-  _TRIBUNAL._serialized_start=487
-  _TRIBUNAL._serialized_end=598
-  _GETGAMEREQUEST._serialized_start=600
-  _GETGAMEREQUEST._serialized_end=651
-  _GETGAMERESPONSE._serialized_start=653
-  _GETGAMERESPONSE._serialized_end=710
-  _GETACTORREQUEST._serialized_start=712
-  _GETACTORREQUEST._serialized_end=803
-  _GETACTORRESPONSE._serialized_start=805
-  _GETACTORRESPONSE._serialized_end=865
-  _STATE._serialized_start=867
-  _STATE._serialized_end=973
+  _ACTOR._serialized_end=241
+  _GAME._serialized_start=244
+  _GAME._serialized_end=395
+  _TOMBSTONE._serialized_start=397
+  _TOMBSTONE._serialized_end=450
+  _VOTECOUNT._serialized_start=452
+  _VOTECOUNT._serialized_end=503
+  _TRIBUNAL._serialized_start=505
+  _TRIBUNAL._serialized_end=616
+  _GETGAMEREQUEST._serialized_start=618
+  _GETGAMEREQUEST._serialized_end=669
+  _GETGAMERESPONSE._serialized_start=671
+  _GETGAMERESPONSE._serialized_end=728
+  _GETACTORREQUEST._serialized_start=730
+  _GETACTORREQUEST._serialized_end=821
+  _GETACTORRESPONSE._serialized_start=823
+  _GETACTORRESPONSE._serialized_end=883
 # @@protoc_insertion_point(module_scope)

@@ -4,6 +4,6 @@ from engine.affiliation import NEUTRAL
 
 class NeutralRole(Role):
 
-    @property
+    @classmethod
     def affiliation(self) -> str:
         return NEUTRAL

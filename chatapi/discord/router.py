@@ -82,7 +82,6 @@ class Router:
         self._message_routers[channel].unregister_general_callback(callback)
 
     async def on_message(self, message: "disnake.Message") -> None:
-        print(f"Got a message: {message}")
         router = self._message_routers.get(message.channel.name)
         if router is None:
             return

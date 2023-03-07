@@ -14,6 +14,7 @@ from engine.phase import TurnPhase
 from proto import state_pb2
 
 if T.TYPE_CHECKING:
+    from chatapi.discord.town_hall import TownHall
     from engine.player import Player
     from engine.role.base import Role
     from engine.tribunal import Tribunal
@@ -46,6 +47,8 @@ class Game:
         self._allow_chat = False
         self._allow_pm = False
 
+        self._town_hall: "TownHall" = None
+
     def to_proto(self) -> state_pb2.Game:
         game = state_pb2.Game(
             game_phase=self.game_phase.name,
@@ -56,6 +59,16 @@ class Game:
         game.actors.extend([a.to_proto() for a in self.get_actors()])
         # TODO: graveyard
         return game
+
+    @property
+    def town_hall(self) -> "TownHall":
+        return self._town_hall
+
+    @town_hall.setter
+    def town_hall(self, value: "TownHall") -> None:
+        if self._town_hall is not None:
+            raise ValueError("TownHall already set")
+        self._town_hall = value
 
     def assign_roles(self, roles: T.List["Role"]) -> None:
         """
@@ -84,16 +97,20 @@ class Game:
         print(f"Making {player_name} a {role_name}")
         actor._role = role
 
-    def get_actor_by_name(self, name: str) -> T.Optional["Actor"]:
+    def get_actor_by_name(self, name: str, raise_if_missing: bool = False) -> T.Optional["Actor"]:
         for actor in self._actors:
             if actor.name == name:
                 return actor
+        if raise_if_missing:
+            raise ValueError(f"No actor by name {name}")
         return None
 
-    def get_actor_for_player(self, player: "Player") -> T.Optional["Actor"]:
+    def get_actor_for_player(self, player: "Player", raise_if_missing: bool = False) -> T.Optional["Actor"]:
         for actor in self._actors:
             if actor._player == player:
                 return actor
+        if raise_if_missing:
+            raise ValueError(f"No actor for player {player}")
         return None
 
     def add_players(self, *players: "Player") -> None:
@@ -102,17 +119,11 @@ class Game:
                 continue
             self._players.append(player)
 
-    def announce(self, message: str) -> None:
-        if self._messenger is None:
-            print(message)
-        else:
-            self._messenger.announce(message)
-
     def update_graveyard(self, actor: "Actor") -> None:
         """
         This should get called whenever `kill` is called.
         """
-        self._graveyard.append(Tombstone(actor, self._turn_phase.name, self._turn_number, actor.epitaph))
+        self._graveyard.append(Tombstone(actor, self._turn_phase, self._turn_number, actor.epitaph))
 
     @property
     def graveyard(self) -> T.List["Tombstone"]:
@@ -183,8 +194,28 @@ class Game:
             self._actors.append(actor)
 
     @property
+    def actors(self) -> T.List["Actor"]:
+        return [a for a in self._actors]
+
+    @property
+    def human_actors(self) -> T.List["Actor"]:
+        return [a for a in self._actors if a.player.is_human]
+
+    @property
+    def bot_actors(self) -> T.List["Actor"]:
+        return [a for a in self._actors if a.player.is_bot]
+
+    @property
     def players(self) -> T.List["Player"]:
         return [p for p in self._players]
+
+    @property
+    def human_players(self) -> T.List["Player"]:
+        return [p for p in self._players if p.is_human]
+
+    @property
+    def bot_players(self) -> T.List["Player"]:
+        return [p for p in self._players if p.is_bot]
 
     def get_actors_with_affiliation(self, affiliation: str) -> T.List["Actor"]:
         return [actor for actor in self._actors if actor.affiliation == affiliation]
@@ -228,18 +259,3 @@ class Game:
 
         # return an explicit dictionary with defaulted values instead of a default dictionary
         return {actor: votes[actor] for actor in self._actors}
-
-    def flush_all_messages(self, delay: float = None) -> None:
-        """
-        Probably want to code in more gradual transitions here eventually
-        """
-        if self._messenger is None:
-            print("No messenger. Skipping messages")
-            return
-
-        # always drive private messages instantly
-        asyncio.ensure_future(self.messenger.drive_all_private_queues())
-
-        # drive public messages with specified delay for dramatic effect
-        asyncio.ensure_future(self.messenger.drive_public_queue())
-        

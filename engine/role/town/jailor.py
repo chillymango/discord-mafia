@@ -17,6 +17,9 @@ class Jailor(TownRole):
     Jail action during day should fix target at night.
     """
 
+    # TODO: fix this omg
+    DISABLED = True
+
     @classmethod
     def day_actions(cls) -> ActionSequence:
         return [Jail]

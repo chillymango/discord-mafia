@@ -4,6 +4,8 @@ Action Base Class
 from enum import Enum
 import typing as T
 
+from engine.message import Message
+
 if T.TYPE_CHECKING:
     from engine.actor import Actor
     from engine.crimes import Crime
@@ -68,19 +70,19 @@ class Action:
         actor.add_crimes(self.crimes.get(success, []))
 
     def message_results(self, actor: "Actor", success: bool) -> None:
-        msg = actor.game.messenger
+        messenger = actor.game.messenger
         if success:
-            msg.private_actor(actor, self.feedback_text_success(), flush=False)
+            messenger.queue_message(Message.private_feedback(actor, "Action Success", self.feedback_text_success()))
         elif success == False:
-            msg.private_actor(actor, self.feedback_text_fail(), flush=False)
+            messenger.queue_message(Message.private_feedback(actor, "Action Failed", self.feedback_text_fail()))
         for targ in actor.targets:
             if success:
-                msg.private_actor(targ, self.target_text_success(), flush=False)
+                messenger.queue_message(Message.private_feedback(targ, "You've Been Targeted", self.target_text_success()))
             elif success == False:
-                msg.private_actor(targ, self.target_text_fail(), flush=False)
+                messenger.queue_message(Message.private_feedback(targ, "You've Been Targeted", self.target_text_fail()))
         if success and self.announce():
             # if there is text here it should be announced
-            actor.game.announce(self.announce())
+            messenger.queue_message(Message.night_sequence(actor.game, self.announce()))
 
     @property
     def crimes(self) -> T.Dict[bool, T.Iterable["Crime"]]:

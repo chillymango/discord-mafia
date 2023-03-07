@@ -6,8 +6,12 @@ from collections import deque
 import disnake
 
 from chatapi.discord.icache import icache
+from chatapi.discord.town_hall import TownHall
+from engine.game import Game
+from engine.message import Message
 from engine.message import InboundMessageDriver
 from engine.message import MessageDriver
+from engine.message import MessageType
 from engine.message import OutboundMessageDriver
 
 from proto import message_pb2
@@ -15,6 +19,7 @@ from proto import message_pb2
 if T.TYPE_CHECKING:
     from chatapi.app.bot import BotUser
     from chatapi.discord.input_panel import InputController
+    from engine.actor import Actor
     from engine.message import Message
     from engine.player import Player
 
@@ -22,10 +27,42 @@ if T.TYPE_CHECKING:
 class BotMessageDriver(OutboundMessageDriver):
     """
     Drives messages to bots.
+    """
 
-    The gRPC API should poll once a second or so for new messages.
+    def __init__(self, actor: "Actor") -> None:
+        self._actor = actor
+        self._grpc_queue: asyncio.Queue[Message] = asyncio.Queue()
+        super().__init__()
+
+    def wants(self, message: "Message") -> bool:
+        """
+        We want this message if it's intended for our bot.
+        """
+        return message.addressed_to == self._actor or message.message_type in (
+            MessageType.ANNOUNCEMENT,
+            MessageType.NIGHT_SEQUENCE,
+            MessageType.INDICATOR,
+            MessageType.PLAYER_PUBLIC_MESSAGE,
+        )
+
+    @property
+    def grpc_queue(self) -> asyncio.Queue[Message]:
+        return self._grpc_queue
+
+    async def publish(self, message: "Message") -> None:
+        """
+        All this does is make the message *availble* for gRPC to pick up.
+        """
+        await self._grpc_queue.put(message)
+
+
+class OldBotMessageDriver(OutboundMessageDriver):
+    """
+    Drives messages to bots.
+
     This driver just makes a queue available for the API to pull and clear.
     The engine-facing side puts elements in the queue.
+    The gRPC side waits for items to be made available.
     """
 
     def __init__(self) -> None:
@@ -36,6 +73,14 @@ class BotMessageDriver(OutboundMessageDriver):
             defaultdict(asyncio.Queue)
         self._private_grpc_queues: T.Dict["BotUser", asyncio.Queue[message_pb2.Message]] = \
             defaultdict(asyncio.Queue)
+
+    def wants(self, message: "Message") -> bool:
+        """
+        We want the following:
+            * public messages from players
+            * game announcements
+            * 
+        """
 
     async def flush_public(self) -> None:
         """
@@ -109,44 +154,111 @@ class BotMessageDriver(OutboundMessageDriver):
 class WebhookDriver(InboundMessageDriver):
     """
     Drives messages to Discord from bots using Webhooks
-
-    TODO: move this to other module, it's not a MessageDriver
     """
 
-    def __init__(self, pub_channel: "disnake.TextChannel") -> None:
-        self._pub_channel = pub_channel
+    def __init__(self, game: "Game", channel: "disnake.TextChannel") -> None:
+        super().__init__()
+        self._game = game
+        self._channel = channel
         self._webhook: "disnake.Webhook" = None
-        self._message_queue: asyncio.Queue[T.Tuple[str, str]] = asyncio.Queue()
+        self._terminated = False
+        self._discussion_thread: "disnake.Thread" = None
 
-    async def setup_webhook(self):
-        self._webhook = await self._pub_channel.create_webhook(name="Botspeak")
-
-    async def run(self) -> None:
+    def wants(self, message: "Message") -> bool:
         """
-        This should just run in the background as a task.
+        We want all Botspeak messages and that's it
         """
-        while True:
-            try:
-                user, message = await self._message_queue.get()
-                await self.publish_webhook(user, message)
-            except asyncio.CancelledError:
-                break
-
-    async def publish_webhook(self, user: str, message: str) -> None:
-        if self._webhook is None:
-            print("Warning: no WebHook to publish to")
-            return
-        await self._webhook.send(
-            content=message,
-            username=user,
-            allowed_mentions=disnake.AllowedMentions.all()
+        return message.message_type in (
+            MessageType.BOT_PUBLIC_MESSAGE,
+            MessageType.INDICATOR,
         )
 
-    def queue_publish_webhook(self, user: str, message: str) -> None:
-        """
-        Synchronous method that queues up a message to publish over Webhook.
-        """
-        self._message_queue.put_nowait((user, message))
+    @classmethod
+    async def create_with_name(cls, game: "Game", channel: "disnake.TextChannel", name: str) -> "WebhookDriver":
+        driver = cls(game, channel)
+        await driver.setup_webhook(name)
+        return driver
+
+    async def setup_webhook(self, name: str):
+        self._webhook = await self._channel.create_webhook(name=name)
+
+    def set_discussion_thread(self, thread: "disnake.Thread") -> None:
+        self._discussion_thread = thread
+
+    def format_message(self, message: "Message") -> T.Dict[str, T.Any]:
+        embed = disnake.Embed(title=message.title, description=message.message)
+        if message.addressed_from:
+            username = message.addressed_from.name
+        else:
+            username = "Mafia Bot"
+        return dict(embed=embed, username=username)
+
+    async def publish(self, message: "Message") -> None:
+        try:
+            if self._webhook is None:
+                return
+            fmt = self.format_message(message)
+            if self._game.town_hall.discussion_thread:
+                fmt["thread"] = self._game.town_hall.discussion_thread
+            await self._webhook.send(**fmt)
+        except Exception as exc:
+            print(repr(exc))
+
+
+class DiscordPublicDriver(OutboundMessageDriver):
+    """
+    Drives Discord messages to public chat as Mafia Bot.
+
+    For Webhook publishes, use the WebhookDriver.
+    For private publishes, use the DiscordPrivateDriver.
+    """
+
+    def __init__(self, channel: "disnake.TextChannel") -> None:
+        super().__init__()
+        self._channel = channel
+
+    def wants(self, message: "Message") -> bool:
+        return message.message_type in (
+            MessageType.ANNOUNCEMENT,
+            MessageType.DEBUG,  # eek
+            MessageType.NIGHT_SEQUENCE,
+        )
+
+    def format_message(self, message: "Message") -> T.Dict[str, T.Any]:
+        embed = disnake.Embed(title=message.title, description=message.message)
+        return dict(embed=embed)
+
+    async def publish(self, message: "Message") -> None:
+        await self._channel.send(**self.format_message(message))
+
+
+class DiscordPrivateDriver(OutboundMessageDriver):
+    """
+    Drives Discord messages to a private interaction chat as Mafia Bot.
+
+    Each human player should have one of these.
+    """
+
+    def __init__(self, channel: "disnake.TextChannel", actor: "Actor") -> None:
+        super().__init__()
+        self._channel = channel
+        self._actor = actor
+
+    def wants(self, message: "Message") -> bool:
+        return message.addressed_to == self._actor
+
+    def format_message(self, message: "Message") -> T.Dict[str, T.Any]:
+        return dict(content=f"({message.addressed_from.name}): {str(message)}")
+
+    async def publish(self, message: "Message") -> None:
+        ia = icache.get(self._actor.player.user)
+        if ia is None:
+            print(f"WARNING: no interaction for {self._actor.name}. Dropping private message")
+
+        try:
+            await ia.send(**self.format_message(message))
+        except:
+            await ia.followup.send(**self.format_message(message))
 
 
 class DiscordDriver(OutboundMessageDriver):
@@ -156,14 +268,27 @@ class DiscordDriver(OutboundMessageDriver):
 
     def __init__(
         self,
-        pub_channel: "disnake.TextChannel",
+        town_hall: "TownHall",
     ) -> None:
-        self._pub_channel = pub_channel
+        self._town_hall = town_hall
 
         self._public_queue: T.Deque["Message"] = deque()
         self._private_queues: T.Dict["Player", T.Deque["Message"]] = defaultdict(deque)
 
-        self._webhook: "disnake.Webhook" = None
+    @property
+    def publisher(self) -> T.Union[None, "disnake.Thread", "disnake.TextChannel"]:
+        """
+        If we have a thread, use that.
+
+        If we have a channel, use that.
+
+        If we have neither, freak out.
+        """
+        if self._town_hall.discussion_thread:
+            return self._town_hall.discussion_thread
+        if self._town_hall:
+            return self._town_hall.ch_bulletin
+        raise ValueError("Discord driver has no possible outputs")
 
     async def flush_public(self) -> None:
         while self._public_queue:
@@ -183,7 +308,7 @@ class DiscordDriver(OutboundMessageDriver):
 
     async def public_publish(self, message: "Message", flush: bool = True) -> None:
         if flush:
-            await self._pub_channel.send(message)
+            await self.publisher.send(message)
         else:
             self._public_queue.append(message)
 

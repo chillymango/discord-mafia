@@ -32,6 +32,7 @@ message Role {
 message Actor {
     Player player = 1;
     Role role = 2;
+    bool is_alive = 3;
 }
 
 message Game {

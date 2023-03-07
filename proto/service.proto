@@ -1,6 +1,6 @@
 // Bot API definition
 syntax = "proto3";
-//import "command.proto";
+import "command.proto";
 import "connect.proto";
 import "message.proto";
 import "state.proto";
@@ -12,4 +12,11 @@ service GrpcBotApi {
     rpc GetActor(GetActorRequest) returns (GetActorResponse) { }
     rpc SubscribeMessages(SubscribeMessagesRequest) returns (stream SubscribeMessagesResponse) { }
     rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) { }
+
+    rpc TrialVote(TargetRequest) returns (TargetResponse) { }
+    rpc LynchVote(BoolVoteRequest) returns (BoolVoteResponse) { }
+    rpc SkipVote(BoolVoteRequest) returns (BoolVoteResponse) { }
+    // TODO: i think we just need one, client doesn't care if it's day or night
+    rpc DayTarget(TargetRequest) returns (TargetResponse) { }
+    rpc NightTarget(TargetRequest) returns (TargetResponse) { }
 }

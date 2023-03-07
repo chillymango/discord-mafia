@@ -5,7 +5,7 @@ import typing as T
 async def main() -> None:
     from donbot import DonBot
 
-    bots = [DonBot() for _ in range(5)]
+    bots = [DonBot() for _ in range(1)]
     await asyncio.gather(*[bot.run() for bot in bots])
 
 

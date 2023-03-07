@@ -15,12 +15,15 @@ class InteractionCache:
     def get(self, user: "disnake.User") -> T.Optional["disnake.Interaction"]:
         return self._cache.get(user)
 
+    @property
     def keys(self) -> T.Iterator:
         return self._cache.keys
 
+    @property
     def values(self) -> T.Iterator:
         return self._cache.values
 
+    @property
     def items(self) -> T.Iterator:
         return self._cache.items
 
@@ -29,5 +32,5 @@ class InteractionCache:
         self._cache[interaction.user] = interaction
 
 
-# this is basically a singleton
+# singleton object
 icache = InteractionCache()

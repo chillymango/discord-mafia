@@ -6,12 +6,14 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Actor(_message.Message):
-    __slots__ = ["player", "role"]
+    __slots__ = ["is_alive", "player", "role"]
+    IS_ALIVE_FIELD_NUMBER: _ClassVar[int]
     PLAYER_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
+    is_alive: bool
     player: Player
     role: Role
-    def __init__(self, player: _Optional[_Union[Player, _Mapping]] = ..., role: _Optional[_Union[Role, _Mapping]] = ...) -> None: ...
+    def __init__(self, player: _Optional[_Union[Player, _Mapping]] = ..., role: _Optional[_Union[Role, _Mapping]] = ..., is_alive: bool = ...) -> None: ...
 
 class Game(_message.Message):
     __slots__ = ["actors", "game_phase", "graveyard", "tribunal", "turn_number", "turn_phase"]

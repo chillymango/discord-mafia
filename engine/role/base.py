@@ -7,6 +7,12 @@ import typing as T
 from engine.action.base import ActionSequence
 from engine.action.base import TargetGroup
 
+from engine.affiliation import MAFIA
+from engine.affiliation import NEUTRAL
+from engine.affiliation import TOWN
+from engine.affiliation import TRIAD
+from engine.wincon import AutoVictory
+from engine.wincon import WinCondition
 from proto import state_pb2
 
 
@@ -35,6 +41,35 @@ class Role:
         the ChatGPT prompt as part of input tuning.
         """
         return "TODO: fill out role description."
+
+    @classmethod
+    def affiliation_description(cls) -> str:
+        """
+        This should describe the role's affiliation.
+        """
+        if cls.affiliation == TOWN:
+            return "You are a member of the Town. You do not know who your teammates are. You " + \
+                "must exercise caution, strategy, and teamwork to survive."
+
+        if cls.affiliation == MAFIA:
+            return "You are a member of the Mafia. A member of an organized crime family, you " + \
+                "should know who your teammates are. You must work together in secrecy to " + \
+                "eliminate all your opposition and come to rule this town."
+
+        if cls.affiliation == TRIAD:
+            return "You are a member of the Triad. A member of an organized crime family, you " + \
+                "should know who your teammates are. You must work together in secrecy to " + \
+                "eliminate all your opposition and come to rule this town."
+
+        if cls.affiliation == NEUTRAL:
+            return "You are a Neutral character. You are not affiliated with the Town, the Triad, " + \
+                "or the Mafia. You have your own specific win condition."
+
+        return "Your affiliation is unknown. Please contact the game developers."
+
+    @classmethod
+    def win_condition(cls) -> T.Type[WinCondition]:
+        return AutoVictory
 
     @classmethod
     def day_action_description(cls) -> str:
@@ -123,7 +158,7 @@ class Role:
             role.action_description = self.night_action_description()
         else:
             role.action_description = "You have no possible actions."
-        role.affiliation = self.affiliation
+        role.affiliation = self.affiliation()
         return role
 
     @property
@@ -152,7 +187,7 @@ class Role:
     def allow_self_target(self) -> bool:
         return self._allow_self_target
 
-    @property
+    @classmethod
     def affiliation(self) -> str:
         return ""
 

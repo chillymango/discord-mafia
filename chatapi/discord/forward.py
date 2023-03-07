@@ -11,6 +11,7 @@ if T.TYPE_CHECKING:
     from chatapi.discord.driver import BotMessageDriver
     from chatapi.discord.router import Router
     from engine.game import Game
+    from engine.message import Messenger
 
 
 class ForwardChatMessages:
@@ -22,13 +23,17 @@ class ForwardChatMessages:
 
     def __init__(
         self,
-        driver: "BotMessageDriver",
+
         game: "Game",
         channel: "disnake.TextChannel",
     ):
-        self._driver = driver
+        # TODO: should we forward directly to BotMessageDriver or go through Messenger?
         self._game = game
         self._channel = channel
+
+    @property
+    def messenger(self) -> "Messenger":
+        return self._game.messenger
 
     @property
     def channel(self) -> "disnake.TextChannel":
@@ -55,9 +60,20 @@ class ForwardChatMessages:
         Forward only chat messages to bots. They should be labeled as public messages.
 
         Bots are responsible for filtering messages they sent.
+
+        TODO: i don't think we need this anymore
         """
-        if message.author.bot:
-            await self._driver.public_publish(Message.announce(self._game, message.content), game_message=False)
+        if not message.content:
+            # this shouldn't be going out anyways
+            return
+
+        if message.author.bot and "Mafia" not in message.author.name:
+            actor = self._game.get_actor_by_name(message.author)
+            if actor is None:
+                print(f"Dropping forwarded message to {message.author.name}")
+            self.messenger.queue_message(Message.bot_public_message(actor, message.content))
         elif not message.author.bot:
-            # TODO: makes more sense probably to remove this labeling loci
-            await self._driver.public_publish(Message.announce(self._game, f"{message.author.nick}: {message}"))
+            actor = self._game.get_actor_by_name(message.author)
+            if actor is None:
+                print(f"Dropping forwarded message to {message.author.name}")
+            self.messenger.queue_message(Message.player_public_message(actor, message.content))

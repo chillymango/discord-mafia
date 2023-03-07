@@ -4,6 +4,7 @@ import typing as T
 
 from engine.crimes import Crime
 from engine.action.base import Action
+from engine.message import Message
 
 if T.TYPE_CHECKING:
     from engine.actor import Actor
@@ -349,6 +350,7 @@ class ConstableKill(Kill):
 
     def action_result(self, actor: "Actor", target: "Actor") -> T.Optional[bool]:
         # it's not up for debate
+        target._attacked_by.append(self.__class__)
         target.kill()
         self._action_result["victim"] = target
         return True
@@ -357,5 +359,9 @@ class ConstableKill(Kill):
         victim: "Actor" = self._action_result.get("victim")
         if victim is None:
             return
-        # tell everybody that the kill happened
-        actor.game.messenger.announce(f"{actor.name} the Constable reveals a gun and shoots {victim.name}!")
+        actor.game.messenger.queue_message(Message.announce(
+            actor.game,
+            f"{actor.name} the Constable",
+            f"Reveals a gun and shoots {victim.name}!\n\n"
+            f"Their role was {victim.role.name}."
+        ))

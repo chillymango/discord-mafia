@@ -165,7 +165,7 @@ def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG, override
         return False, "Game is already setup"
 
     # get all known roles
-    setup_config = config.get("setup")
+    setup_config: T.Dict = config.get("setup")
     if setup_config is None or setup_config.get("role_list") is None or setup_config.get("role_weights") is None:
         return False, "Malformed config"
 

@@ -2,12 +2,17 @@
 It's the Robot Mafia
 """
 import asyncio
+import random
 import time
 import typing as T
 
 from grpc import aio
 from grpc import RpcError
 
+from donbot.action import BotAction
+from donbot.auto_ctx import AutomationContext
+from donbot.resolver import RandomResolver
+from proto import command_pb2
 from proto import connect_pb2
 from proto import message_pb2
 from proto import state_pb2
@@ -44,7 +49,16 @@ class DonBot:
         self._game: state_pb2.Game = None  # this updates
 
         self._subscribe_task: asyncio.Task = None
+        self._print_task: asyncio.Task = None
         self._message_queue: asyncio.Queue[message_pb2.Message] = asyncio.Queue()
+        self.setup_resolvers()
+
+        self._should_exit = False
+
+    def setup_resolvers(self) -> None:
+        self._random_resolver = RandomResolver()
+        self._action_resolver = self._random_resolver
+        self._resolvers = {ba: self._random_resolver for ba in BotAction}
 
     @property
     def name(self) -> str:
@@ -102,8 +116,77 @@ class DonBot:
                 response: state_pb2.GetGameResponse = await \
                     stub.GetGame(state_pb2.GetGameRequest(timestamp=time.time(), bot_id=self._bot_id))
                 self._game = response.game
+
+                for actor in self._game.actors:
+                    if actor.player.name == self.name:
+                        break
+                else:
+                    return False
+                if not actor.is_alive:
+                    print(f"Uh oh! We're dead!")
+                    self._should_exit = True
+                    return False
+
+                return True
             except RpcError as error:
                 print(f"Error response: {repr(error)}")
+
+    def contextualize(self) -> T.Dict[BotAction, T.List[T.Any]]:
+        # this gives us a list of possible bot actions
+        autoctx = AutomationContext.create_from_game_proto(self._bot_name, self._game)
+        bot_actions = autoctx.infer_actions()
+        targets = autoctx.infer_targets(bot_actions)
+        print(f"Possible Actions: {bot_actions}\nPossible Targets: {targets}\n")
+        return targets
+
+    def plan_action(self, action_target: T.Dict[BotAction, T.List[T.Any]]) -> T.Tuple[BotAction, T.Any]:
+        # then we need to do something to figure out what the best one to take at any given point is
+        # if we're randomly picking we don't need a lot of info, all we really need is
+        # the set of choices
+        # first we need to pick the action to take
+        action = self._action_resolver.resolve(list(action_target.keys()))[0]
+        if not action_target[action]:
+            return (None, None)
+
+        target = self._resolvers[action].resolve(action_target[action])[0]
+        return (action, target)
+
+    async def execute_action(self, action: BotAction, target: T.Any) -> None:
+        # now that we have an action and a target, we can execute it
+        if action is None:
+            print("Null Action?")
+            return
+
+        if action == BotAction.NO_OP:
+            print("No-Op action")
+            return
+        if action == BotAction.DAY_ACTION:
+            print("Day Target")
+            await self.target(target)
+            return
+        if action == BotAction.NIGHT_ACTION:
+            print("Night Target")
+            await self.target(target)
+            return
+        if action == BotAction.LYNCH_VOTE:
+            print("Lynch Vote")
+            await self.lynch_vote(target)
+            return
+        if action == BotAction.TRIAL_VOTE:
+            print("Trial Vote")
+            await self.trial_vote(target)
+            return
+        if action == BotAction.SKIP_VOTE:
+            print("Skip Vote")
+            await self.trial_vote(target)
+            return
+        if action == BotAction.SEND_PRIVATE_MESSAGE:
+            print("Private Message (TODO)")
+            return
+        if action == BotAction.SEND_PUBLIC_MESSAGE:
+            print("Public Message (TODO)")
+            return
+        print(f"Bot Action: {action.name} Unhandled")
 
     async def establish_identity(self) -> None:
         async with aio.insecure_channel(BIND) as channel:
@@ -117,10 +200,8 @@ class DonBot:
                 print(f"Error response: {repr(error)}")
 
     async def subscribe_messages(self) -> None:
-        """
-        blah
-        """
         self._subscribe_task = asyncio.create_task(self.subscribe_task())
+        self._print_task = asyncio.create_task(self.print_message_task())
 
     async def subscribe_task(self) -> None:
         """
@@ -136,17 +217,33 @@ class DonBot:
                     bot_id=self._bot_id
                 )
             )
+            consecutive_fails = 0
             while True:
                 try:
                     response: message_pb2.SubscribeMessagesResponse = await call.read()
                     for msg in response.messages:
                         self._message_queue.put_nowait(msg)
+                    consecutive_fails = 0
                 except RpcError as error:
                     print(f"Error in subscribe messages: {repr(error)}")
-                    # TODO: does it make sense to retry here??? reconnect and retry?
+                    consecutive_fails += 1
+                    if consecutive_fails > 3:
+                        # TODO: look for a way to see if RPC was cancelled from server
+                        break
                 except asyncio.CancelledError:
                     print(f"Let's bounce")
                     break
+
+    async def print_message_task(self) -> None:
+        """
+        Wraps the message printer as async and runs it in the background
+        """
+        while True:
+            try:
+                msg = await self._message_queue.get()
+                print(f"[{self.name} | {self.role.name}] {msg.message}")
+            except asyncio.CancelledError:
+                break
 
     def print_all_messages(self) -> None:
         """
@@ -160,16 +257,71 @@ class DonBot:
         """
         Issue a message to public chat
         """
-        print(f'sending public message: {message}')
         async with aio.insecure_channel(BIND) as channel:
             stub = service_pb2_grpc.GrpcBotApiStub(channel)
             try:
                 to_send = message_pb2.Message(timestamp=time.time(), source=message_pb2.Message.PUBLIC, message=message)
                 response: message_pb2.SendMessageResponse = await \
                     stub.SendMessage(message_pb2.SendMessageRequest(timestamp=time.time(), bot_id=self._bot_id, message=to_send))
-                print(response.success)
             except RpcError as error:
                 print(f"Error in send: response: {repr(error)}")
+
+    async def trial_vote(self, target_name: str) -> None:
+        """
+        Issue a trial vote
+        """
+        async with aio.insecure_channel(BIND) as channel:
+            stub = service_pb2_grpc.GrpcBotApiStub(channel)
+            try:
+                await stub.TrialVote(command_pb2.TargetRequest(
+                    timestamp=time.time(),
+                    bot_id=self._bot_id,
+                    target_name=target_name
+                ))
+            except RpcError as error:
+                print(f"Error in trial vote: {repr(error)}")
+
+    async def lynch_vote(self, vote: bool) -> None:
+        """
+        Issue a boolean lynch vote
+        """
+        async with aio.insecure_channel(BIND) as channel:
+            stub = service_pb2_grpc.GrpcBotApiStub(channel)
+            try:
+                await stub.LynchVote(command_pb2.BoolVoteRequest(
+                    timestamp=time.time(),
+                    bot_id=self._bot_id,
+                    vote=vote
+                ))
+            except RpcError as error:
+                print(f"Error in lynch vote: {repr(error)}")
+
+    async def skip_vote(self, vote: bool) -> None:
+        """
+        Issue a boolean skip vote
+        """
+        async with aio.insecure_channel(BIND) as channel:
+            stub = service_pb2_grpc.GrpcBotApiStub(channel)
+            try:
+                await stub.SkipVote(command_pb2.BoolVoteRequest(
+                    timestamp=time.time(),
+                    bot_id=self._bot_id,
+                    vote=vote
+                ))
+            except RpcError as error:
+                print(f"Error in skip vote: {repr(error)}")
+
+    async def target(self, target_name: str) -> None:
+        async with aio.insecure_channel(BIND) as channel:
+            stub = service_pb2_grpc.GrpcBotApiStub(channel)
+            try:
+                await stub.DayTarget(command_pb2.TargetRequest(
+                    timestamp=time.time(),
+                    bot_id=self._bot_id,
+                    target_name=target_name
+                ))
+            except RpcError as error:
+                print(f"Error in target: {repr(error)}")
 
     async def inner(self) -> None:
         """
@@ -183,15 +335,17 @@ class DonBot:
         The game state shouldn't change in most 1s intervals and so the feedback
         received shouldn't execute anything...
         """
-        print("Doing the inner execution loop I guess")
-        t_init = time.time()
-        while time.time() - t_init < 60:
-            await self.get_game_state()
-            self.print_all_messages()
-            await self.send_public_message(f"Hello there my name is {self.name}")
-            # something here to evaluate
-            # print all messages lol
-            await asyncio.sleep(3.)
+        while not self._should_exit:
+            t_init = time.time()
+
+            if await self.get_game_state():
+                action_target = self.contextualize()
+                if action_target:
+                    await self.execute_action(*self.plan_action(action_target))
+            t_final = time.time()
+            sleep_dur = random.random() * 10.0
+            print(f"Loop Duration: {t_final - t_init}. Sleeping for {sleep_dur}s")
+            await asyncio.sleep(sleep_dur)
 
     async def run(self) -> None:
         try:

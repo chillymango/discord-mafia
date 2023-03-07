@@ -166,16 +166,16 @@ class InputPanel:
             ]
 
     def _init_daybreak(self) -> None:
-        if self.role.affiliation == NEUTRAL:
+        if self.role.affiliation() == NEUTRAL:
             header = "You are a Neutral role."
         else:
-            header = f"You are a member of the {self.role.affiliation.capitalize()}."
+            header = f"You are a member of the {self.role.affiliation().capitalize()}."
 
         description = (f"{header}\n{self.role.role_description()}\n\n")
 
-        if self.role.affiliation in (MAFIA, TRIAD):
+        if self.role.affiliation() in (MAFIA, TRIAD):
             # also inform who your teammates are
-            teammates = self.game.get_actors_with_affiliation(self.role.affiliation)
+            teammates = self.game.get_actors_with_affiliation(self.role.affiliation())
             description += "Your teammates are:\n\t" + "\n\t".join(
                 [f"{x.name} [{x.role.name}]" for x in teammates]
             ) + "\n"
