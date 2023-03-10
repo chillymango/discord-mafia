@@ -2,6 +2,7 @@ import typing as T
 
 from engine.action.base import Action
 from engine.action.base import ActionSequence
+from engine.action.base import TargetGroup
 from engine.action.jail import Jail
 from engine.action.kill import JailorKill
 from engine.role.base import RoleGroup
@@ -17,8 +18,30 @@ class Jailor(TownRole):
     Jail action during day should fix target at night.
     """
 
-    # TODO: fix this omg
-    DISABLED = True
+    @classmethod
+    def role_description(cls) -> str:
+        """
+        This should describe the role at a high-level.
+
+        Generally safe for this to be flavor-text. Probably also going to be fed into
+        the ChatGPT prompt as part of input tuning.
+        """
+        return "A jail guard officer, secretly detaining suspects."
+
+    @classmethod
+    def day_action_description(cls) -> str:
+        """
+        This should describe the day action at a high-level.
+        """
+        return "Choose someone to Jail and Rollblock the following night.\n" + \
+            "This action only takes effect if nobody is lynched during the day."
+
+    @classmethod
+    def night_action_description(cls) -> str:
+        """
+        This should describe the night action at a high-level.
+        """
+        return "Speak anonymously with the jailed player, and optionally execute that player."
 
     @classmethod
     def day_actions(cls) -> ActionSequence:
@@ -33,6 +56,10 @@ class Jailor(TownRole):
         * we can work out the number of targets allowed based on what this looks like
         """
         return [JailorKill]
+
+    @property
+    def target_group(self) -> TargetGroup:
+        return TargetGroup.JAIL
 
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:

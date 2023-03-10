@@ -29,8 +29,8 @@ class InvestigateCrimes(Action):
         """
         Look at the target and return its crime list.
         """
-        self.reset_results()
-        self._action_result["crimes"] = [crime.name.capitalize() for crime in target.investigated_crimes]
+        print(f"Investigate crimes {actor.name} -> {target.name}")
+        self._action_result["crimes"] = [crime.value.capitalize() for crime in target.investigated_crimes]
         return True
 
 
@@ -40,7 +40,7 @@ class InvestigateSuspicion(Action):
     """
 
     def feedback_text_success(self) -> str:
-        suspicion = self._action_result.get("suspicion")
+        suspicion = self._action_result.get("suspicion", "UNKNOWN [BUG]")
         if suspicion == "Not Suspicious":
             return "Your target is not suspicious"
         if suspicion in (MAFIA, TRIAD):

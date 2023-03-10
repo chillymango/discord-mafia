@@ -19,8 +19,8 @@ class Annoy(Action):
         """
         return True
 
-    def target_text_success(self) -> str:
+    def feedback_text_success(self) -> str:
         return "You visited your target tonight."
 
-    def feedback_text_success(self) -> str:
+    def target_text_success(self) -> str:
         return "An insane person visited you tonight."

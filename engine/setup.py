@@ -3,6 +3,7 @@ Game Setup
 
 The config should call out the setup.
 """
+import asyncio
 from collections import defaultdict
 import numpy as np
 import random
@@ -17,6 +18,7 @@ from engine.role.neutral.jester import Jester
 from engine.role.town.doctor import Doctor
 from engine.role.town.investigator import Investigator
 from engine.role.town.escort import Escort
+from engine.stepper import sleep_override
 from engine.tribunal import Tribunal
 
 if T.TYPE_CHECKING:
@@ -45,9 +47,9 @@ EXAMPLE_CONFIG = {
         # these are minimum lengths, if there are lots of things to print, we'll go longer
         "phase_lengths": {
             "daybreak": 10.0,
-            "daylight": 180.0,
+            "daylight": 20.0,
             "dusk": 10.0,
-            "night": 30.0,
+            "night": 20.0,
             "night_sequence": 5.0,
         }
     },
@@ -154,7 +156,7 @@ class WeightedSampler:
             return valid_roles[0]
 
 
-def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG, override_player_count: bool = False) -> T.Tuple[bool, str]:
+def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG, override_player_count: bool = False, skip: bool = False) -> T.Tuple[bool, str]:
     """
     If setup succeeds, return True
     Otherwise return False
@@ -242,6 +244,10 @@ def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG, override
         return False, f"Failed to assign roles: {repr(err)}"
 
     # create Tribunal
+    if skip:
+        sleep = sleep_override
+    else:
+        sleep = asyncio.sleep
     game.tribunal = Tribunal(game, config.get("trial", {}))
 
     return True, "Successfully setup the game"

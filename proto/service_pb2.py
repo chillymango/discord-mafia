@@ -17,7 +17,7 @@ import proto.message_pb2 as message__pb2
 import proto.state_pb2 as state__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rservice.proto\x1a\rcommand.proto\x1a\rconnect.proto\x1a\rmessage.proto\x1a\x0bstate.proto2\xdd\x04\n\nGrpcBotApi\x12.\n\x07\x43onnect\x12\x0f.ConnectRequest\x1a\x10.ConnectResponse\"\x00\x12\x37\n\nDisconnect\x12\x12.DisconnectRequest\x1a\x13.DisconnectResponse\"\x00\x12.\n\x07GetGame\x12\x0f.GetGameRequest\x1a\x10.GetGameResponse\"\x00\x12\x31\n\x08GetActor\x12\x10.GetActorRequest\x1a\x11.GetActorResponse\"\x00\x12N\n\x11SubscribeMessages\x12\x19.SubscribeMessagesRequest\x1a\x1a.SubscribeMessagesResponse\"\x00\x30\x01\x12:\n\x0bSendMessage\x12\x13.SendMessageRequest\x1a\x14.SendMessageResponse\"\x00\x12.\n\tTrialVote\x12\x0e.TargetRequest\x1a\x0f.TargetResponse\"\x00\x12\x32\n\tLynchVote\x12\x10.BoolVoteRequest\x1a\x11.BoolVoteResponse\"\x00\x12\x31\n\x08SkipVote\x12\x10.BoolVoteRequest\x1a\x11.BoolVoteResponse\"\x00\x12.\n\tDayTarget\x12\x0e.TargetRequest\x1a\x0f.TargetResponse\"\x00\x12\x30\n\x0bNightTarget\x12\x0e.TargetRequest\x1a\x0f.TargetResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rservice.proto\x1a\rcommand.proto\x1a\rconnect.proto\x1a\rmessage.proto\x1a\x0bstate.proto2\x90\x05\n\nGrpcBotApi\x12.\n\x07\x43onnect\x12\x0f.ConnectRequest\x1a\x10.ConnectResponse\"\x00\x12\x37\n\nDisconnect\x12\x12.DisconnectRequest\x1a\x13.DisconnectResponse\"\x00\x12.\n\x07GetGame\x12\x0f.GetGameRequest\x1a\x10.GetGameResponse\"\x00\x12\x31\n\x08GetActor\x12\x10.GetActorRequest\x1a\x11.GetActorResponse\"\x00\x12N\n\x11SubscribeMessages\x12\x19.SubscribeMessagesRequest\x1a\x1a.SubscribeMessagesResponse\"\x00\x30\x01\x12:\n\x0bSendMessage\x12\x13.SendMessageRequest\x1a\x14.SendMessageResponse\"\x00\x12.\n\tTrialVote\x12\x0e.TargetRequest\x1a\x0f.TargetResponse\"\x00\x12\x32\n\tLynchVote\x12\x10.BoolVoteRequest\x1a\x11.BoolVoteResponse\"\x00\x12\x31\n\x08SkipVote\x12\x10.BoolVoteRequest\x1a\x11.BoolVoteResponse\"\x00\x12.\n\tDayTarget\x12\x0e.TargetRequest\x1a\x0f.TargetResponse\"\x00\x12\x30\n\x0bNightTarget\x12\x0e.TargetRequest\x1a\x0f.TargetResponse\"\x00\x12\x31\n\x08LastWill\x12\x10.LastWillRequest\x1a\x11.LastWillResponse\"\x00\x62\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'service_pb2', globals())
@@ -25,5 +25,5 @@ if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
   _GRPCBOTAPI._serialized_start=76
-  _GRPCBOTAPI._serialized_end=681
+  _GRPCBOTAPI._serialized_end=732
 # @@protoc_insertion_point(module_scope)

@@ -41,6 +41,7 @@ class Router:
     def __init__(self) -> None:
         self._button_router = Subrouter()
         self._string_router = Subrouter()
+        self._modal_router = Subrouter()
 
         # mapping of channel name to a subrouter for that channel
         self._message_routers: T.Dict[str, Subrouter] = defaultdict(Subrouter)
@@ -81,6 +82,18 @@ class Router:
     def unregister_message_callback(self, channel: str, callback: T.Coroutine) -> None:
         self._message_routers[channel].unregister_general_callback(callback)
 
+    def register_custom_modal_callback(self, custom_id: str, callback: T.Coroutine) -> None:
+        self._modal_router.register_custom_callback(custom_id, callback)
+
+    def unregister_custom_modal_callback(self, custom_id: str) -> None:
+        self._modal_router.unregister_custom_callback(custom_id)
+
+    def register_general_modal_callback(self, callback: T.Coroutine) -> None:
+        self._modal_router.register_general_callback(callback)
+
+    def unregister_general_modal_callback(self, callback: T.Coroutine) -> None:
+        self._modal_router.unregister_general_callback(callback)
+
     async def on_message(self, message: "disnake.Message") -> None:
         router = self._message_routers.get(message.channel.name)
         if router is None:
@@ -88,6 +101,9 @@ class Router:
         # TODO: i don't think it makes sense to support custom_id filters for message
         # interactions but will need to re-evaluate this in the future
         await asyncio.gather(*[gcb(message) for gcb in router._general_callbacks])
+
+    async def on_modal_submit(self, interaction: "disnake.Interaction") -> None:
+        await self.on_interact(self._modal_router, interaction)
 
     async def on_interact(self, router: "Subrouter", interaction: "disnake.Interaction") -> None:
         print(interaction.id)  # debugging, see how often we get duplicates
@@ -98,7 +114,7 @@ class Router:
         try:
             await asyncio.gather(*[gcb(interaction) for gcb in router._general_callbacks])
         except Exception as exc:
-            print(f"Erorr executing callback: {repr(exc)}")
+            print(f"Error executing callback: {repr(exc)}")
 
         try:
             key: str = interaction.data.custom_id

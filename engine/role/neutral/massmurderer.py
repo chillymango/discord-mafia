@@ -1,11 +1,20 @@
+import typing as T
+
 from engine.action.base import ActionSequence
 from engine.action.kill import MassMurder
+from engine.role.base import RoleGroup
 from engine.role.neutral import NeutralRole
+from engine.wincon import WinCondition
+from engine.wincon import MassMurdererWin
 
 
 class MassMurderer(NeutralRole):
 
     default_night_immune = True
+
+    @classmethod
+    def win_condition(cls) -> T.Type[WinCondition]:
+        return MassMurdererWin
 
     @classmethod
     def role_description(cls) -> str:
@@ -35,3 +44,7 @@ class MassMurderer(NeutralRole):
     @classmethod
     def night_actions(cls) -> ActionSequence:
         return [MassMurder]
+
+    @classmethod
+    def groups(cls) -> T.Iterable["RoleGroup"]:
+        return super().groups() + [RoleGroup.NEUTRAL_KILLING, RoleGroup.NEUTRAL_EVIL]

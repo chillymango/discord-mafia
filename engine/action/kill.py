@@ -48,15 +48,16 @@ class Kill(Action):
     def ignore_immunity(self) -> bool:
         return False
 
-    def attack(self, actor: "Actor") -> None:
+    def attack(self, actor: "Actor") -> True:
         """
         Do the attack transaction
         """
         actor._attacked_by.append(self.__class__)
         actor.hitpoints -= self.kill_damage
         if actor.hitpoints <= 0:
-            # if this hit drives them over the edge, use this assailant's death note
             actor.kill()
+            return True
+        return False
 
     def feedback_text_success(self) -> str:
         return ""
@@ -74,13 +75,19 @@ class Kill(Action):
     def kill_report_text(cls) -> str:
         return "Smited by God (probably a bug, contact devs)"
 
+    def target_title(self, success: bool) -> str:
+        if success:
+            return "You've Been Killed"
+        return "Danger"
+
     def action_result(self, actor: "Actor", target: "Actor") -> T.Optional[bool]:
         if not self.ignore_immunity and (target.role._night_immune or target._vest_active):
             return False
 
         # if we get here, the attack goes through and applies damage, but might not kill
         # but we still want to generally report the attack
-        self.attack(target)
+        if self.attack(target):
+            target.leave_death_note(actor.death_note)
 
         return True
 
@@ -89,6 +96,8 @@ class JailorKill(Kill):
     """
     Kill description should update
     """
+
+    ORDER = 75
 
     @property
     def ignore_immunity(self) -> bool:
@@ -164,6 +173,23 @@ class SerialKillerKill(Kill):
 
     def target_text_success(self) -> str:
         return "You were killed by a Serial Killer"
+
+    # if you were jailed and you're still alive, kill your jailor
+    def action_result(self, actor: "Actor", target: "Actor") -> T.Optional[bool]:
+        """
+        TODO: jailor interception on SK instead of Jailor feels wrong
+        """
+        if actor.in_jail:
+            # get first jailor, this will be random
+            for jailor, prisoner in actor.game._jail_map.items():
+                if prisoner == actor:
+                    # switch target so we can see SK visited jailor
+                    actor.choose_targets(jailor)
+                    return super().action_result(actor, jailor)
+
+        # default fallback is to just do original action
+        # if we were jailed originally this should be a no-target
+        return super().action_result(actor, target)
 
 
 class ArsonistKill(Kill):
@@ -362,6 +388,78 @@ class ConstableKill(Kill):
         actor.game.messenger.queue_message(Message.announce(
             actor.game,
             f"{actor.name} the Constable",
-            f"Reveals a gun and shoots {victim.name}!\n\n"
-            f"Their role was {victim.role.name}."
+            f"Reveals a gun and shoots {victim.name}!",
         ))
+
+        # immediately issue death report as well
+        actor.game.death_reporter.report_death(victim)
+
+
+class Suicide(Kill):
+    """
+    Player-committed suicide
+    """
+
+    @classmethod
+    def kill_report_text(cls) -> str:
+        return "Committed suicide."
+
+    def target_text_success(self) -> str:
+        return "You committed suicide."
+
+    def action_result(self, actor: "Actor", target: "Actor") -> T.Optional[bool]:
+        actor._attacked_by.append(self.__class__)
+        actor.kill()
+        return True
+
+    def announce(self) -> str:
+        return "You hear a single shot ring out in the night."
+
+
+class WitchSuicide(Kill):
+
+    @classmethod
+    def kill_report_text(cls) -> str:
+        return "Struggled, and then shot themselves"
+
+
+class BusSuicide(Kill):
+    """
+    Bus-driver induced suicide
+
+    TODO: this by default ignores night immunity but make that configurable?
+    """
+
+    @classmethod
+    def kill_report_text(cls) -> str:
+        return "Run over by a bus."
+
+    def target_text_success(self) -> str:
+        return "You were run over by a bus."
+
+    def target_text_fail(self) -> str:
+        return "You were almost run over by a bus."
+
+    def announce(self) -> str:
+        return "You hear the loud sound of a bus crashing."
+
+
+class HeartAttack(Kill):
+    """
+    AFK / leaver kill
+    """
+
+    @classmethod
+    def kill_report_text(cls) -> str:
+        return "Died of a heart attack."
+
+    def target_text_success(self) -> str:
+        return "You died of a heart attack."
+
+    def action_result(self, actor: "Actor", target: "Actor") -> T.Optional[bool]:
+        actor._attacked_by.append(self.__class__)
+        actor.kill()
+        return True
+
+    def announce(self) -> str:
+        return "You hear a dull thud."

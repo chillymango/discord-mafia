@@ -43,7 +43,8 @@ class SequenceEvent:
         if not self._actor.has_ability_uses:
             print("WARN: trying to execute ability without uses. How did this happen")
             return
-        self._action.validate_targets(self._targets)
+        if not self._action.validate_targets(self._targets):
+            return
         success = self._action.do_action(self._actor)
         if success is not None:
             self._actor.role._ability_uses -= 1

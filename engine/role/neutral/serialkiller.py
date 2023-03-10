@@ -1,7 +1,12 @@
+import typing as T
+
 from engine.action.base import ActionSequence
 from engine.action.kill import SerialKillerKill
 from engine.action.nou import NoU
+from engine.role.base import RoleGroup
 from engine.role.neutral import NeutralRole
+from engine.wincon import WinCondition
+from engine.wincon import SerialKillerWin
 
 
 class SerialKiller(NeutralRole):
@@ -9,6 +14,10 @@ class SerialKiller(NeutralRole):
     default_night_immune = True
     default_rb_immune = True
     default_intercept_rb = True
+
+    @classmethod
+    def win_condition(cls) -> T.Type[WinCondition]:
+        return SerialKillerWin
 
     @classmethod
     def role_description(cls) -> str:
@@ -37,3 +46,7 @@ class SerialKiller(NeutralRole):
     @classmethod
     def night_actions(cls) -> ActionSequence:
         return [SerialKillerKill]
+
+    @classmethod
+    def groups(cls) -> T.Iterable["RoleGroup"]:
+        return super().groups() + [RoleGroup.NEUTRAL_KILLING, RoleGroup.NEUTRAL_EVIL]

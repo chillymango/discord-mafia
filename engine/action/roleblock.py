@@ -20,6 +20,8 @@ class Roleblock(Action):
             False: [Crime.SOLICITING],
         }
 
+    def target_title(self, success: bool) -> str:
+        return "You've Been Roleblocked"
 
     def feedback_text_success(self) -> str:
         return "You successfully roleblocked your target."
@@ -28,7 +30,7 @@ class Roleblock(Action):
         return "You went to occupy their night, but they turned you away. Your target is roleblock immune!"
 
     def target_text_success(self) -> str:
-        return "An attractive individual approached you to occupy your night. You were roleblocked!"
+        return "An attractive individual approached you to occupy your night."
 
     def target_text_fail(self) -> str:
         if self._action_result.get("intercepted", False):
@@ -59,3 +61,13 @@ class Roleblock(Action):
         # roleblock logic should be to switch target to None if roleblock is successful
         target.reset_target()
         return True
+
+
+class JailBlock(Roleblock):
+    """
+    Confers night immunity and generally grants a roleblock.
+
+    Primary differences:
+        * no feedback text is given
+        * 
+    """

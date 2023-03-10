@@ -1,6 +1,7 @@
 import typing as T
 
 from engine.action.base import Action
+from engine.message import Message
 
 if T.TYPE_CHECKING:
     from engine.actor import Actor
@@ -38,12 +39,12 @@ class Protect(Action):
 
     @classmethod
     def kill_report_text(cls) -> str:
-        return "Killed in a duel"
-
-    def target_text_success(self) -> str:
-        return "Your target was attacked tonight! You fight off the attacker."
+        return "Killed in a duel."
 
     def feedback_text_success(self) -> str:
+        return "Your target was attacked tonight! You fight off the attacker."
+
+    def target_text_success(self) -> str:
         return "You were attacked tonight, but a Bodyguard arrived to fight off your attacker!"
 
     def intercept_text(self) -> str:
@@ -66,7 +67,7 @@ class Protect(Action):
                 anon.choose_targets(actor)
                 self._action_result["intercepted"] = anon
                 return True
-        return False
+        return None
 
     def message_results(self, actor: "Actor", success: bool) -> None:
         """
@@ -74,6 +75,8 @@ class Protect(Action):
         """
         attacker: "Actor" = self._action_result.get("intercepted")
         if attacker is not None:
-            attacker.game.messenger.private_actor(attacker, self.intercept_text())
+            attacker.game.messenger.queue_message(
+                Message.private_feedback(attacker, "Intercepted!", self.intercept_text())
+            )
 
         return super().message_results(actor, success)

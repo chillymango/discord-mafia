@@ -10,15 +10,18 @@ import typing as T
 from chatapi.app.bot_api import BotApi
 from chatapi.app.grpc.api import api
 from chatapi.app.grpc.run import run_grpc_server
+from chatapi.discord.channel import channel_manager
 from chatapi.discord.forward import ForwardChatMessages
 from chatapi.discord.driver import BotMessageDriver
 from chatapi.discord.driver import DiscordPublicDriver
 from chatapi.discord.driver import DiscordPrivateDriver
 from chatapi.discord.driver import WebhookDriver
+from chatapi.discord.game import GAMES
 from chatapi.discord.icache import icache
 from chatapi.discord.router import router
 from chatapi.discord.town_hall import TownHall
 from engine.game import Game
+from engine.message import Message
 from engine.message import Messenger
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
@@ -27,6 +30,13 @@ from engine.setup import EXAMPLE_CONFIG
 from engine.setup import do_setup
 from engine.stepper import sleep_override
 from engine.stepper import Stepper
+from engine.wincon import MassMurdererWin
+from engine.wincon import SerialKillerWin
+from engine.wincon import TownWin
+from engine.wincon import MafiaWin
+from engine.wincon import SurvivorWin
+from engine.wincon import ExecutionerWin
+from engine.wincon import JesterWin
 
 if T.TYPE_CHECKING:
     import disnake
@@ -81,12 +91,17 @@ class Session:
         while not self._game.concluded:
             await self._stepper.step()
 
+        # step until daylight
+        while not self._game.turn_phase == TurnPhase.DAYLIGHT:
+            await self._stepper.step()
+
     async def start(self) -> None:
         result, msg = do_setup(self._game)
         if not result:
             raise RuntimeError(f"Failed to setup game: {msg}")
-        self._game.debug_override_role("chilly mango", "Constable")
-        self._game.debug_override_role("asiannub", "Veteran")
+        self._game.debug_override_role("donbot", "Blackmailer")
+        self._game.debug_override_role("asiannub", "Escort")
+        #self._game.debug_override_role("wagyu jubei")
 
         #self._server_task = asyncio.create_task(run_grpc_server(self._game))
         api.set_bot_api(BotApi(self._game))
@@ -105,12 +120,44 @@ class Session:
         self._game.messenger = self._messenger
         self._messenger.start()
 
+        # if the game starts, lets store it
+        GAMES[self._town_hall.ch_bulletin] = self._game
+
         # start game
         self._game.game_phase = GamePhase.IN_PROGRESS
         await self._town_hall.display_welcome()
-        await asyncio.sleep(3.0)
 
-        # set it to Dusk
-        #self._game.turn_phase = TurnPhase.DUSK
+        await asyncio.sleep(5.0)
 
-        await asyncio.gather(self.game_loop(), self.ui_loop())
+        ui_task = asyncio.create_task(self.ui_loop())
+        await self.game_loop()
+        ui_task.cancel()
+
+        # game should be over now, evaluate win conditions
+        winners = self._game.evaluate_post_game()
+
+        # figure out the highest "score" of win condition
+        # manually do a check here i guess...
+        win_conditions = set(winner.role.win_condition() for winner in winners)
+
+        priority = [
+            SerialKillerWin,
+            MassMurdererWin,
+            MafiaWin,
+            TownWin,
+            ExecutionerWin,
+            SurvivorWin,
+            JesterWin
+        ]
+        for wc in priority:
+            if wc in win_conditions:
+                break
+        else:
+            raise ValueError(f"Unknown Win Condition. Valid ones: {win_conditions}")
+
+        # create win condition screen with primary win condition
+        self._messenger.queue_message(Message.announce(self._game, "We have reached a conclusion..."))
+        await asyncio.sleep(8.0)
+        await self._town_hall.display_victory(winners, wc)
+        channel_manager.mark_to_preserve(self._town_hall.ch_bulletin)
+        print("FIN")

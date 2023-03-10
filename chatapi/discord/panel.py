@@ -1,4 +1,5 @@
 import asyncio
+import time
 import typing as T
 
 import disnake
@@ -6,9 +7,13 @@ from collections import deque
 
 from chatapi.discord.icache import icache
 from chatapi.discord.router import router
+from engine.affiliation import MAFIA
+from engine.affiliation import TRIAD
+from engine.message import Message
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
 from engine.resolver import SequenceEvent
+from engine.role.neutral.judge import Judge
 from engine.tribunal import TribunalState
 
 if T.TYPE_CHECKING:
@@ -16,9 +21,81 @@ if T.TYPE_CHECKING:
     from engine.actor import Actor
     from engine.game import Game
     from engine.player import User
+    from engine.wincon import WinCondition
 
 
 SKIP_DAY = "Skip Day"
+
+
+def setup_lwdn_modal(game: "Game") -> None:
+    """
+    Hook up the buttons to the correct callback coroutines
+    """
+
+    async def update_lwdn(interaction: "disnake.ModalInteraction") -> None:
+        user = interaction.user
+        actor = game.get_actor_by_name(user.name)
+        if actor is None:
+            print(f"Failed to update LWDN for {user.name}")
+            return
+        actor._last_will = ""
+        actor._death_note = ""
+        for row in interaction.data.components:
+            for entry in row['components']:
+                if entry.get('custom_id') == 'lw':
+                    actor._last_will = entry['value']
+                elif entry.get('custom_id') == 'dn':
+                    actor._death_note = entry['value']
+
+        await interaction.send("Successfully updated last will / death note", ephemeral=True)
+
+    router.register_custom_modal_callback("lwdn", update_lwdn)
+
+
+def lwdn_modal() -> disnake.ui.Modal:
+    """
+    Create a Last Will / Death Note Modal
+    """
+    modal = disnake.ui.Modal(
+        title="Last Will and Death Note",
+        components=[],
+        custom_id=f"lwdn"
+    )
+    modal.add_text_input(
+        label="Last Will",
+        custom_id=f"lw",
+        style=disnake.TextInputStyle.long,
+        required=False,
+        placeholder="Last Will",
+    )
+    modal.add_text_input(
+        label="Death Note",
+        custom_id=f"dn",
+        style=disnake.TextInputStyle.short,
+        required=False,
+    )
+    return modal
+
+
+CRIER_STATEMENT_TEXT_ID = f"crier-statement-text"
+
+def crier_modal() -> disnake.ui.Modal:
+    """
+    Create a Crier statement modal
+    """
+    modal = disnake.ui.Modal(
+        title="Crier Statement",
+        custom_id=f"crier-statement-modal",
+        components=[],
+    )
+    modal.add_text_input(
+        label="Crier Statement",
+        custom_id=CRIER_STATEMENT_TEXT_ID,
+        style=disnake.TextInputStyle.long,
+        required=True,
+        placeholder="This message will be sent to the entire Town"
+    )
+    return modal
 
 
 class Panel:
@@ -62,6 +139,8 @@ class Panel:
 
         self.initialize()
         self.setup_router()
+
+        self._visible = False
 
     def setup_router(self) -> None:
         """
@@ -142,15 +221,24 @@ class Panel:
 
         # don't update if the panel isn't active
         if not self.is_active():
-            if self.should_delete():
+            if self._visible and self.should_delete():
                 await self.delete()
+                self._visible = False
             return
+
         self.update()
+
         # do not publish if there's no change
-        if self.data_repr() == self._prev_pub:
+        if self._visible and self.data_repr() == self._prev_pub:
             return
+
         self._prev_pub = self.data_repr()
-        await self.publish()
+
+        try:
+            await self.publish()
+            self._visible = True
+        except Exception as exc:
+            print(f"Error driving panel {self.__class__.__name__}: {repr(exc)}")
 
     async def publish(self) -> None:
         """
@@ -175,10 +263,15 @@ class Panel:
         Delete messages. By default will delete all instances.
         """
         if idx is None:
-            await asyncio.gather(*[msg.delete() for msg in self._instances])
+            try:
+                await asyncio.gather(*[msg.delete() for msg in self._instances])
+            except:
+                # TODO: better handling here for deletion attempts, maybe add
+                # to async queue to retry
+                self._instances = []
             return
         await self._instances[idx].delete()
-        self._instances = []
+        self._instances.remove(idx)
 
 
 class LobbyPanel(Panel):
@@ -268,7 +361,9 @@ class PublicGamePanel(GamePanel):
 
     def should_delete(self) -> bool:
         # this just a test, what happens?
-        return True
+        if len(self._active_history) == 1:
+            return False
+        return self._active_history[-1] is False and self._active_history[-2] is True
 
 
 class PrivateGamePanel(GamePanel):
@@ -293,13 +388,76 @@ class PrivateGamePanel(GamePanel):
         self._interact_request_embed.title = "Setup Incomplete"
         self._interact_request_embed.description = "Please click the button below to finish setup"
         self._interact_request_row = disnake.ui.ActionRow()
-        self._interact_request_row.add_button(style=disnake.ButtonStyle.primary, label="Complete")
+        self._interact_request_row.add_button(style=disnake.ButtonStyle.primary, label="Complete", custom_id=self.setup_button_id)
+
+        self._lwdn_row = disnake.ui.ActionRow()
+        self._lwdn_row.add_button(label="Last Will / Death Note", custom_id=self.lwdn_id)
+        self._lwdn_row.add_button(label="Open Graveyard", custom_id=self.open_graveyard_id)
+        self._lwdn_modal = lwdn_modal()
 
         # cache the previous interaction. When we need to "edit", we only edit the previous issue
         # if it exists. Following the original panel logic, we will always issue if this is None.
         self._previous_interaction: disnake.InteractionMessage = None
         super().__init__(game, channel, debug=debug)
         self.setup_message_collector()
+
+    @property
+    def open_graveyard_id(self) -> str:
+        # TODO: a lot of these can probably just be general
+        return f"open-gy-{self.__class__.__name__}-{self._actor.name}"
+
+    @property
+    def setup_button_id(self) -> str:
+        return f"setup-button-{self.__class__.__name__}-{self._actor.name}"
+
+    @property
+    def lwdn_id(self) -> str:
+        return f"open-lwdn-{self.__class__.__name__}-{self._actor.name}"
+
+    @property
+    def submit_lwdn_id(self) -> str:
+        return f"submit-lwdn-{self.__class__.__name__}-{self._actor.name}"
+
+    def setup_router(self) -> None:
+        super().setup_router()
+        self.setup_lwdn_modal()
+        
+        async def acknowledge(interaction: "disnake.Interaction") -> None:
+            await interaction.send("setup complete", ephemeral=True)
+
+        router.register_button_custom_callback(self.setup_button_id, acknowledge)
+        router.register_button_custom_callback(self.open_graveyard_id, self.open_graveyard)
+
+    async def open_graveyard(self, interaction: "disnake.Interaction") -> None:
+        gy = GraveyardPanel(self._game, self._channel, debug=self._debug)
+        gy.initialize()
+        await interaction.send(**gy.rehydrate(), ephemeral=True)
+
+    async def open_lwdn(self, interaction: "disnake.Interaction") -> None:
+        # hydrate with current LW / DN
+        self._lwdn_modal.custom_id = self.submit_lwdn_id
+        self._lwdn_modal.components[0].children[0].placeholder = self._actor._last_will
+        self._lwdn_modal.components[0].children[0].value = self._actor._last_will
+        self._lwdn_modal.components[1].children[0].placeholder = self._actor._death_note
+        self._lwdn_modal.components[1].children[0].value = self._actor._death_note
+        await interaction.response.send_modal(self._lwdn_modal)
+
+    async def update_lwdn(self, interaction: "disnake.ModalInteraction") -> None:
+        for row in interaction.data.components:
+            for entry in row['components']:
+                if entry.get('custom_id') == 'lw':
+                    self._actor._last_will = entry['value']
+                elif entry.get('custom_id') == 'dn':
+                    self._actor._death_note = entry['value']
+
+        await interaction.send("Successfully updated last will / death note", ephemeral=True)
+
+    def setup_lwdn_modal(self) -> None:
+        """
+        Hook up the buttons to the correct callback coroutines
+        """
+        router.register_button_custom_callback(self.lwdn_id, self.open_lwdn)
+        router.register_custom_modal_callback(self.submit_lwdn_id, self.update_lwdn)
 
     @property
     def author(self) -> str:
@@ -312,6 +470,9 @@ class PrivateGamePanel(GamePanel):
     def should_delete(self) -> bool:
         """
         Delete stale interaction panels to avoid old information from being made available
+
+        TODO: need to figure out a way to make this not trigger if we think the latest
+        version of the message is still on the screen...
         """
         if len(self._active_history) == 1:
             return False
@@ -325,9 +486,6 @@ class PrivateGamePanel(GamePanel):
         router.register_message_callback(self._channel.name, self.on_message)
 
     async def on_message(self, message: "disnake.Message") -> None:
-        """
-        fuck lol how do i check that it originated from our request??
-        """
         if not message.author.bot:
             return
         if message.interaction is not None and message.interaction.user is not self._actor.player.user:
@@ -349,7 +507,7 @@ class PrivateGamePanel(GamePanel):
             print(f"No interaction for {user.name}, requesting a new one")
             await self._channel.send(
                 embed=self._interact_request_embed,
-                components=[self._interact_request_row]
+                components=[self._interact_request_row],
             )
         return ia
 
@@ -393,14 +551,16 @@ class PrivateGamePanel(GamePanel):
 
         TODO: maybe add more granularity
         """
-        print('deleting panels')
         ia = icache.get(self._actor.player.user)
         
         for msg in self._instances:
             try:
                 await ia.followup.delete_message(msg.id)
             except Exception as exc:
+                print(f"Failed to delete private panel {self.__class__.__name__}")
                 print(repr(exc))
+
+        self._instances = []
 
     async def drive(self) -> None:
         """
@@ -427,6 +587,12 @@ class GraveyardPanel(PublicGamePanel):
     * if a daytime kill happens (i.e Constable -- update last)
     """
 
+    def should_delete(self) -> bool:
+        """
+        TBD whether this is considered clutter
+        """
+        return False
+
     def initialize(self) -> None:
         """
         Generally initialize to empty.
@@ -437,8 +603,9 @@ class GraveyardPanel(PublicGamePanel):
         self._embed.clear_fields()
 
     def is_active(self) -> bool:
+        # i guess we'll only do this if someone asks for it...
+        return False
         return self._game.game_phase == GamePhase.IN_PROGRESS and (
-            self._game.turn_phase == TurnPhase.DAYLIGHT or
             self._game.turn_phase == TurnPhase.NIGHT
         )
 
@@ -456,9 +623,15 @@ class GraveyardPanel(PublicGamePanel):
         """
         self._embed.clear_fields()
         for tombstone in self._game.graveyard:
+            if tombstone.turn_phase in (TurnPhase.DAYBREAK, TurnPhase.DAYLIGHT, TurnPhase.DUSK):
+                phase_name = "Day"
+            elif tombstone.turn_phase in (TurnPhase.NIGHT, TurnPhase.NIGHT_SEQUENCE):
+                phase_name = "Night"
+            else:
+                phase_name = "Invalid"
             self._embed.add_field(
                 name=f"**{tombstone.actor.name} - {tombstone.actor.role.name}**",
-                value=f"{tombstone.turn_phase.name.capitalize()} {tombstone.turn_number}. "
+                value=f"Died {phase_name} {tombstone.turn_number}.\n"
                       f"{tombstone.epitaph}",
                 inline=False,
             )
@@ -484,15 +657,20 @@ class DayPanel(PrivateGamePanel):
     def is_active(self) -> bool:
         return self._game.game_phase == GamePhase.IN_PROGRESS and (
             self._game.turn_phase == TurnPhase.DAYLIGHT
-        )
+        ) and (self._actor.has_day_action)
 
     def setup_router(self) -> None:
+        super().setup_router()
         router.register_string_custom_callback(self.day_target_id, self.update_day_target)
 
     async def update_day_target(self, interaction: "disnake.Interaction") -> None:
         name = interaction.data['values'][0]
         actor = self._game.get_actor_by_name(name)
-        if actor is None:
+        if actor is None or not actor.is_alive or self._game.turn_phase not in (
+            TurnPhase.DAYBREAK,
+            TurnPhase.DAYLIGHT,
+            # don't allow targeting in Dusk
+        ):
             self._actor.choose_targets()
             await interaction.response.defer()
         else:
@@ -511,7 +689,9 @@ class DayPanel(PrivateGamePanel):
         self._embed.title = self._actor.role.name
         self._embed.description = \
             f"You are {'the' if self._actor.role.unique() else 'a'} **{self._actor.role.name}**.\n\n" \
-            f"**Action**: {self._actor.role.day_action_description()}\n"
+            f"**Action**:\n{self._actor.role.day_action_description()}\n\n"
+        if self._actor.has_day_action and self._actor.role._ability_uses == 0:
+            self._embed.description += f"**Uses Left**:\n{self._actor.role._ability_uses}\n\n"
         # TODO: add statuses, like:
         #   * gov reveal
         #   * blackmailed / 49'd
@@ -537,13 +717,14 @@ class DayPanel(PrivateGamePanel):
 
     def _update_rows(self) -> None:
         """
-        If player has a night action, present a targeting row.
+        If player has a day action, present a targeting row.
 
-        If player has no night action, don't present anything.
+        If player has no day action, don't present anything.
         """
         self._components = []
         if self.has_valid_day_action:
             self._components.append(self._target_row_select)
+        self._components.append(self._lwdn_row)
 
     def update(self):
         """
@@ -564,9 +745,7 @@ class TribunalPanel(PublicGamePanel):
         return "Trial Votes Here"
 
     def is_active(self) -> bool:
-        return self._game.game_phase == GamePhase.IN_PROGRESS and (
-            self._game.turn_phase == TurnPhase.DAYLIGHT
-        )
+        return self._game.tribunal.is_active
 
     @property
     def lynch_vote_yes_id(self) -> str:
@@ -650,6 +829,11 @@ class TribunalPanel(PublicGamePanel):
         """
         name = interaction.data['values'][0]
         actor = self._game.get_actor_by_name(interaction.user.name)
+        # TODO: see if we can route this pre-emptively so we just never get it
+        if not actor.is_alive:
+            await interaction.response.defer()
+            return
+
         if name == SKIP_DAY:
             self._game.tribunal.submit_skip_vote(actor, actor)
         else:
@@ -662,6 +846,10 @@ class TribunalPanel(PublicGamePanel):
     async def handle_lynch_vote(self, interaction: "disnake.Interaction", vote: T.Optional[bool]) -> None:
         name = interaction.user.name
         actor = self._game.get_actor_by_name(name)
+        if not actor.is_alive:
+            await interaction.response.defer()
+            return
+
         self._game.tribunal.submit_lynch_vote(actor, vote)
         # we send an interaction here since the panel is public
         await interaction.response.defer()
@@ -688,7 +876,7 @@ class NightPanel(PrivateGamePanel):
     def is_active(self) -> bool:
         return self._game.game_phase == GamePhase.IN_PROGRESS and (
             self._game.turn_phase == TurnPhase.NIGHT
-        )
+        ) and (self._actor.has_night_action or self._actor.vests)
 
     @property
     def night_target_id(self) -> str:
@@ -703,6 +891,7 @@ class NightPanel(PrivateGamePanel):
         return f"remove_vest_{self._actor.name.replace(' ', '_')}"
 
     def setup_router(self) -> None:
+        super().setup_router()
         router.register_string_custom_callback(self.night_target_id, self.update_night_target)
         router.register_button_custom_callback(self.wear_vest_id, self.wear_vest)
         router.register_button_custom_callback(self.remove_vest_id, self.remove_vest)
@@ -711,7 +900,9 @@ class NightPanel(PrivateGamePanel):
         self._embed.title = self._actor.role.name
         self._embed.description = \
             f"You are {'the' if self._actor.role.unique() else 'a'} **{self._actor.role.name}**.\n\n" \
-            f"**Action**: {self._actor.role.night_action_description()}"
+            f"**Action**:\n{self._actor.role.night_action_description()}\n\n"
+        if self._actor.has_night_action and self._actor.role._ability_uses > 0:
+            self._embed.description += f"**Uses Left**:\n{self._actor.role._ability_uses}\n\n"
         self._embed.set_author(name=self.author)
         if self._actor.vests:
             self._embed.description += f"You have {self._actor.vests} bulletproof vests remaining.\n"
@@ -742,7 +933,7 @@ class NightPanel(PrivateGamePanel):
 
     @property
     def has_valid_night_action(self) -> bool:
-        return self._actor.has_night_action and self._actor.has_ability_uses
+        return self._actor.has_night_action and self._actor.has_ability_uses and len(self._actor.get_target_options())
 
     def _update_valid_targets(self) -> None:
         valid_targets = self._actor.get_target_options(as_str=True)
@@ -759,10 +950,11 @@ class NightPanel(PrivateGamePanel):
         If player has no night action, don't present anything.
         """
         self._components = []
-        if self.has_valid_night_action:
+        if self.has_valid_night_action and not self._actor.in_jail:
             self._components.append(self._target_row_select)
         if self._actor.vests:
             self._components.append(self._use_vest_row)
+        self._components.append(self._lwdn_row)
 
     def update(self):
         """
@@ -799,6 +991,65 @@ class NightPanel(PrivateGamePanel):
             await interaction.response.defer()
 
 
+class JudgePanel(NightPanel):
+    """
+    Panel for Crier / Judge
+
+    Guess which role I like more
+    """
+
+    def is_active(self) -> bool:
+        return self._game.game_phase == GamePhase.IN_PROGRESS and (
+            self._game.turn_phase == TurnPhase.NIGHT
+        )
+
+    def setup_router(self) -> None:
+        super().setup_router()
+        router.register_button_custom_callback(self.crier_message_id, self.open_crier_modal)
+        router.register_custom_modal_callback(self.submit_crier_message_id, self.submit_crier_modal)
+
+    @property
+    def submit_crier_message_id(self) -> str:
+        return f"submit-crier-message-{self._actor.name}"
+
+    @property
+    def crier_message_id(self) -> str:
+        return f"open-crier-message-{self._actor.name}"
+
+    async def open_crier_modal(self, interaction: "disnake.Interaction") -> None:
+        # hydrate with current LW / DN
+        self._crier_modal.custom_id = self.submit_crier_message_id
+        await interaction.response.send_modal(self._crier_modal)
+
+    async def submit_crier_modal(self, interaction: "disnake.ModalInteraction") -> None:
+        row = interaction.data.components[0]
+        for entry in row['components']:
+            if entry.get('custom_id') == CRIER_STATEMENT_TEXT_ID:
+                self._game.messenger.queue_message(Message.announce(
+                    self._game,
+                    "Crier Statement",
+                    entry.get('value'),
+                ))
+        await interaction.send("Successfully issued message as Crier", ephemeral=True, delete_after=60.0)
+
+    def initialize(self) -> None:
+        super().initialize()
+        if isinstance(self._actor.role, Judge):
+            self._night_modal_row = disnake.ui.ActionRow()
+            self._night_modal_row.add_button(
+                label="Issue Message as Crier",
+                custom_id=self.crier_message_id
+            )
+            self._crier_modal = crier_modal()
+        else:
+            self._night_modal_row = None
+            self._crier_modal = None
+
+    def _update_rows(self) -> None:
+        super()._update_rows()
+        self._components.append(self._night_modal_row)
+
+
 class WelcomePanel(PrivateGamePanel):
     """
     This should be shown when the game first starts.
@@ -823,7 +1074,13 @@ class WelcomePanel(PrivateGamePanel):
             f"**Role Description**:\n" \
             f"{role.role_description()}\n\n" \
             f"**Affiliation**:\n" \
-            f"{role.affiliation_description()}\n\n" \
+            f"{role.affiliation_description()}\n\n"
+        if role.affiliation() == MAFIA:
+            self._embed.description += \
+            f"**Mafia Team**:\n" + \
+            '\n'.join([f"- **{maf.name}** (*{maf.role.name}*)" for maf in self._game.get_live_mafia_actors()]) + \
+            f"\n\n"
+        self._embed.description += \
             f"**Win Condition**:\n" \
             f"{role.win_condition().description()}\n\n" \
             f"**Day Action**:\n{role.day_action_description()}\n\n" \
@@ -836,8 +1093,85 @@ class WelcomePanel(PrivateGamePanel):
         # TODO: add a help button
 
 
-class JailPanel(PrivateGamePanel):
+class VictoryPanel(PublicGamePanel):
+    """
+    Show this when the game is over
+    """
+
+    def __init__(
+        self,
+        game: "Game",
+        channel: "disnake.TextChannel",
+        winners: T.List["Actor"],
+        win_condition: "WinCondition",
+        debug: bool = False
+    ) -> None:
+        self._win_condition = win_condition
+        self._winners = winners
+        super().__init__(game, channel, debug=debug)
+
+    def is_active(self) -> bool:
+        return True
+
+    def initialize(self) -> None:
+        self._embed = disnake.Embed()
+        self._embed.title = self._win_condition.title() + "!"
+        self._embed.description = "Thanks for playing!\n\n**Congratulations to**\n"
+        for winner in self._winners:
+            self._embed.add_field(name=winner.name, value=winner.role.name, inline=False)
+
+
+class CourtPanel(PrivateGamePanel):
+    """
+    This shows up if the Judge calls Court.
+
+    All inputs to the discussion thread will be listed as "Jury", except for the
+    Judge and the Crier who can post as "Court".
+
+    "Court" chat at night should just go to the primary?
+    """
+
+    @property
+    def court_chat_id(self) -> str:
+        return f"court-chat-{self._actor.name}"
+
+    def initialize(self) -> None:
+        self._embed = disnake.Embed()
+        self._embed.title = "Court Has Been Called"
+        self._embed.description = "When Court is in session, chat and voting are fully anonymous. " + \
+            "Additionally, the Judge gains extra votes."
+        self._chat_row = disnake.ui.ActionRow()
+        self._chat_row.add_text_input(
+            label="Enter Chat Here",
+            custom_id=self.court_chat_id,
+            style=disnake.TextInputStyle.single_line
+        )
+
+
+class JailPanel(NightPanel):
     """
     This should be shown to the Jailor and allow them to choose to execute
     their target if they have one in jail.
+
+    TODO: this will require a more advanced caching solution since we'll need
+    to switch from using thread interaction to using channel interaction, but
+    right now we only store the latest interaction, so the thread interaction
+    would get popped and the user would not get anymore private panels :(
+
+    ...
+
+    But until then, we just use this Panel in the main channel instead of in thread
     """
+
+    async def update_night_target(self, interaction: "disnake.Interaction") -> None:
+        name = interaction.data['values'][0]
+        actor = self._game.get_actor_by_name(name)
+        if actor is None:
+            # additionally send something to the hideout lol
+            await self._game.town_hall.signal_jail(self._actor, "**Jailor** has changed their mind.")
+            self._actor.choose_targets()
+            await interaction.response.defer()
+        else:
+            await self._game.town_hall.signal_jail(self._actor, "**Jailor** has chosen to **execute** the prisoner.")
+            self._actor.choose_targets(actor)
+            await interaction.response.defer()

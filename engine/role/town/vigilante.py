@@ -2,6 +2,7 @@ import typing as T
 
 from engine.action.base import ActionSequence
 from engine.action.kill import VigilanteKill
+from engine.action.base import TargetGroup
 from engine.role.base import RoleGroup
 from engine.role.town import TownRole
 
@@ -46,6 +47,13 @@ class Vigilante(TownRole):
         * we can work out the number of targets allowed based on what this looks like
         """
         return [VigilanteKill]
+
+    @classmethod
+    def target_group(cls) -> TargetGroup:
+        """
+        Vig target group is special in that on Night 1 they can't kill
+        """
+        return TargetGroup.VIGILANTE
 
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:

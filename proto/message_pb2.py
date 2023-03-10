@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rmessage.proto\"\x89\x01\n\x07Message\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12&\n\x06source\x18\x02 \x01(\x0e\x32\x16.Message.MessageSource\x12\x0f\n\x07message\x18\x03 \x01(\t\"2\n\rMessageSource\x12\x08\n\x04GAME\x10\x00\x12\x0b\n\x07PRIVATE\x10\x01\x12\n\n\x06PUBLIC\x10\x02\"=\n\x18SubscribeMessagesRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\"J\n\x19SubscribeMessagesResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x1a\n\x08messages\x18\x02 \x03(\x0b\x32\x08.Message\"?\n\x1aUnsubscribeMessagesRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\"P\n\x1bUnsubscribeMessagesResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"`\n\x12SendMessageRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\x12\x19\n\x07message\x18\x03 \x01(\x0b\x32\x08.Message\x12\x0c\n\x04loud\x18\x04 \x01(\x08\"H\n\x13SendMessageResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\r\n\x05\x65rror\x18\x03 \x01(\tb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rmessage.proto\"\xdc\x01\n\x07Message\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12&\n\x06source\x18\x02 \x01(\x0e\x32\x16.Message.MessageSource\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\r\n\x05title\x18\x04 \x01(\t\x12\x13\n\x0bturn_number\x18\x05 \x01(\x05\x12\x12\n\nturn_phase\x18\x06 \x01(\x05\"M\n\rMessageSource\x12\x0b\n\x07UNKNOWN\x10\x00\x12\x0b\n\x07PRIVATE\x10\x01\x12\n\n\x06PUBLIC\x10\x02\x12\x0c\n\x08\x46\x45\x45\x44\x42\x41\x43K\x10\x03\x12\x08\n\x04GAME\x10\x04\"=\n\x18SubscribeMessagesRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\"J\n\x19SubscribeMessagesResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x1a\n\x08messages\x18\x02 \x03(\x0b\x32\x08.Message\"?\n\x1aUnsubscribeMessagesRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\"P\n\x1bUnsubscribeMessagesResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"`\n\x12SendMessageRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\x12\x19\n\x07message\x18\x03 \x01(\x0b\x32\x08.Message\x12\x0c\n\x04loud\x18\x04 \x01(\x08\"H\n\x13SendMessageResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\r\n\x05\x65rror\x18\x03 \x01(\t\"G\n\x0fLastWillRequest\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0e\n\x06\x62ot_id\x18\x02 \x01(\t\x12\x11\n\tlast_will\x18\x03 \x01(\t\"E\n\x10LastWillResponse\x12\x11\n\ttimestamp\x18\x01 \x01(\x02\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\r\n\x05\x65rror\x18\x03 \x01(\tb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'message_pb2', globals())
@@ -21,19 +21,23 @@ if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
   _MESSAGE._serialized_start=18
-  _MESSAGE._serialized_end=155
-  _MESSAGE_MESSAGESOURCE._serialized_start=105
-  _MESSAGE_MESSAGESOURCE._serialized_end=155
-  _SUBSCRIBEMESSAGESREQUEST._serialized_start=157
-  _SUBSCRIBEMESSAGESREQUEST._serialized_end=218
-  _SUBSCRIBEMESSAGESRESPONSE._serialized_start=220
-  _SUBSCRIBEMESSAGESRESPONSE._serialized_end=294
-  _UNSUBSCRIBEMESSAGESREQUEST._serialized_start=296
-  _UNSUBSCRIBEMESSAGESREQUEST._serialized_end=359
-  _UNSUBSCRIBEMESSAGESRESPONSE._serialized_start=361
-  _UNSUBSCRIBEMESSAGESRESPONSE._serialized_end=441
-  _SENDMESSAGEREQUEST._serialized_start=443
-  _SENDMESSAGEREQUEST._serialized_end=539
-  _SENDMESSAGERESPONSE._serialized_start=541
-  _SENDMESSAGERESPONSE._serialized_end=613
+  _MESSAGE._serialized_end=238
+  _MESSAGE_MESSAGESOURCE._serialized_start=161
+  _MESSAGE_MESSAGESOURCE._serialized_end=238
+  _SUBSCRIBEMESSAGESREQUEST._serialized_start=240
+  _SUBSCRIBEMESSAGESREQUEST._serialized_end=301
+  _SUBSCRIBEMESSAGESRESPONSE._serialized_start=303
+  _SUBSCRIBEMESSAGESRESPONSE._serialized_end=377
+  _UNSUBSCRIBEMESSAGESREQUEST._serialized_start=379
+  _UNSUBSCRIBEMESSAGESREQUEST._serialized_end=442
+  _UNSUBSCRIBEMESSAGESRESPONSE._serialized_start=444
+  _UNSUBSCRIBEMESSAGESRESPONSE._serialized_end=524
+  _SENDMESSAGEREQUEST._serialized_start=526
+  _SENDMESSAGEREQUEST._serialized_end=622
+  _SENDMESSAGERESPONSE._serialized_start=624
+  _SENDMESSAGERESPONSE._serialized_end=696
+  _LASTWILLREQUEST._serialized_start=698
+  _LASTWILLREQUEST._serialized_end=769
+  _LASTWILLRESPONSE._serialized_start=771
+  _LASTWILLRESPONSE._serialized_end=840
 # @@protoc_insertion_point(module_scope)

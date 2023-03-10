@@ -2,9 +2,10 @@
 Trial System
 """
 import asyncio
-from enum import Enum
+import math
 import time
 import typing as T
+from enum import Enum
 from collections import defaultdict
 
 from engine.component import Component
@@ -42,10 +43,11 @@ class Tribunal(Component):
     Inheriting classes can make overrides based on game rules.
     """
 
-    def __init__(self, game: "Game", tribunal_config: T.Dict[str, T.Any]) -> None:
+    def __init__(self, game: "Game", tribunal_config: T.Dict[str, T.Any], sleeper = asyncio.sleep) -> None:
         self._game = game
         self._config = tribunal_config
         self._state = TribunalState.CLOSED
+        self._sleep = sleeper
 
         self._on_trial: "Actor" = None
 
@@ -72,8 +74,9 @@ class Tribunal(Component):
         self._view_controller: "ViewController" = None
 
         # TODO: populate some trial timings and what not
-        self._day_duration = self._config.get("day_duration", 60.0)
-        self._defense_period = self._config.get("defense_period", 20.0)
+        # :GAMETIMING:
+        self._day_duration = self._config.get("day_duration", 90.0)
+        self._defense_period = self._config.get("defense_period", 15.0)
         self._lynch_vote_period = self._config.get("lynch_vote_period", 15.0)
 
         # lynching on day 1 is troll
@@ -90,18 +93,26 @@ class Tribunal(Component):
         self._reveal_role: bool = False
 
     def to_proto(self) -> state_pb2.Tribunal:
-        tribunal = state_pb2.Tribunal()
+        tribunal = state_pb2.Tribunal(
+            on_trial=self._on_trial.to_proto() if self._on_trial is not None else None,
+        )
         tribunal.state = self.state.name
         tribunal.trial_votes.extend([
             state_pb2.VoteCount(player=actor.player.to_proto(), count=count)
             for actor, count in self.trial_vote_counts.items()
         ])
-        #tribunal.lynch_votes.extend([
-        #    state_pb2.VoteCount(player=actor.player.to_proto(), count=count)
-        #    for actor, count in self.lynch_yes_votes
-        #])
         tribunal.skip_votes = self.skip_vote_counts
         return tribunal
+
+    @property
+    def is_active(self) -> bool:
+        return self._state in (
+            TribunalState.TRIAL_VOTE,
+            TribunalState.TRIAL_DEFENSE,
+            TribunalState.LYNCH_VOTE,
+            TribunalState.JURY_VERDICT,
+            TribunalState.LYNCH_VERDICT,
+        )
 
     @property
     def state(self) -> TribunalState:
@@ -120,11 +131,15 @@ class Tribunal(Component):
         return self._game.messenger
 
     def get_state_description(self) -> str:
+        """
+        TODO: de-couple this from the engine object and attach this to the view model
+        """
         if self.state == TribunalState.CLOSED:
             return "Tribunal is closed"
         if self.state == TribunalState.TRIAL_VOTE and not self._trial_type == TrialType.MULTI:
             # sort the current trial votes and put
-            return "The town may vote to put somebody on trial.\n\n" + \
+            return "The town may vote to put somebody on trial.\n" + \
+                   f"{self.trial_quorum} votes required.\n\n" + \
                 f"{self.trial_tally()}"
         if self.state == TribunalState.TRIAL_VOTE and self._trial_type == TrialType.MULTI:
             return f"The town may vote to lynch. There are {self._lynches_left} lynches remaining today.\n\n" + \
@@ -195,13 +210,26 @@ class Tribunal(Component):
 
         Should be floor(live_players / 2) + 1
         """
-        return len(self._game.get_live_actors()) / 2 + 1
+        return math.floor(len(self._game.get_live_actors()) / 2) + 1
 
     async def do_daylight(self) -> None:
         """
         Run the daylight procedures for the Tribunal
         """
         if self._game.turn_phase != TurnPhase.DAYLIGHT:
+            self._state = TribunalState.CLOSED
+            return
+
+        if self._skip_first_day and self._game.turn_number == 1:
+            # pre-game discussion i guess
+            # TODO: uncomment
+            await asyncio.sleep(7.0)
+            #self.messenger.queue_message(Message.announce(
+            #    self._game,
+            #    "We Will Reconvene Tomorrow",
+            #    "Tomorrow we shall begin the trials and the lynchings"
+            #))
+            #await asyncio.sleep(7.0)
             return
 
         self._state = TribunalState.TRIAL_VOTE
@@ -230,7 +258,7 @@ class Tribunal(Component):
                     f"{self._on_trial.name}, you stand accused of crimes against the town.\n"
                     f"What do you say in your defense?"
                 ))
-                await asyncio.sleep(self._defense_period)
+                await self._sleep(self._defense_period)
                 self._state = TribunalState.LYNCH_VOTE
 
             elif self._state == TribunalState.LYNCH_VOTE:
@@ -239,14 +267,14 @@ class Tribunal(Component):
                     f"{self._on_trial.name} is on Trial",
                     f"The town must now vote to lynch or acquit."
                 ))
-                await asyncio.sleep(self._lynch_vote_period)
+                await self._sleep(self._lynch_vote_period)
                 self._state = TribunalState.JURY_VERDICT
 
             elif self._state == TribunalState.JURY_VERDICT:
                 if self.should_lynch:
                     self.messenger.queue_message(Message.announce(
                         self._game,
-                        "The Town has Voted to Lynch{self._on_trial.name}",
+                        f"The Town has Voted to Lynch {self._on_trial.name}",
                         f"By a vote of {self.lynch_yes_votes} to {self.lynch_no_votes}\n"
                     ))
                     self.messenger.queue_message(Message.indicate(
@@ -256,7 +284,9 @@ class Tribunal(Component):
                         f"By a vote of {self.lynch_yes_votes} to {self.lynch_no_votes}\n"
                         f"{'' if self._anonymous else self.lynch_tally()}",
                     ))
-                    await asyncio.sleep(5.0)
+                    # if they're silenced, we should unsilence here
+                    self._game.town_hall.unsilence(self._on_trial)
+                    await self._sleep(8.0)
                     self._state = TribunalState.LYNCH_VERDICT
                 else:
                     self.messenger.queue_message(Message.indicate(
@@ -266,18 +296,19 @@ class Tribunal(Component):
                         f"By a vote of {self.lynch_yes_votes} to {self.lynch_no_votes}\n"
                         f"{'' if self._anonymous else self.lynch_tally()}",
                     ))
-                    await asyncio.sleep(5.0)
+                    await self._sleep(8.0)
                     self._state = TribunalState.TRIAL_VOTE
                 self.reset_votes()
 
             elif self._state == TribunalState.LYNCH_VERDICT:
-                await asyncio.sleep(2.0)
+                await self._sleep(5.0)
 
                 self._on_trial.lynch()
+                self._game.death_reporter.report_death(self._on_trial)
 
                 # do not announce imediately
                 self._lynches_left -= 1
-                await asyncio.sleep(10.0)
+                await self._sleep(10.0)
                 if self._lynches_left > 0:
                     self._state = TribunalState.TRIAL_VOTE
                 else:
@@ -285,20 +316,10 @@ class Tribunal(Component):
                     break
 
             # check ten times a second? ooooooof
-            await asyncio.sleep(0.1)
+            await self._sleep(0.1)
         else:
-            # debug print
-            print("Trial timed out")
-            self.messenger.queue_message(Message.announce(
-                self._game,
-                "Tribunal is Closing",
-                "It's getting late. We have no time left for trials today.\n"
-                "Let's reconvene tomorrow."
-            ))
+            self._state = TribunalState.CLOSED
             return
-
-        # debug print
-        print("Trial concluded?")
 
     @property
     def show_lynch_vote_view(self) -> bool:
@@ -385,7 +406,11 @@ class Tribunal(Component):
         Get the string that describes the lynch votes.
         """
         output = ""
+
         for actor in self._game.get_live_actors():
+            if actor == self._on_trial:
+                continue
+
             raw = self._lynch_vote.get(actor)
             if raw:
                 res = "GUILTY"
@@ -394,6 +419,7 @@ class Tribunal(Component):
             else:
                 res = "ABSTAIN"
             output += f"\t**{actor.name}** voted **{res}**\n"
+
         return output
 
     def maybe_skip_day(self) -> bool:
@@ -422,36 +448,53 @@ class Tribunal(Component):
             if counts >= self.trial_quorum:
                 self._on_trial = target
                 self.messenger.queue_message(Message.private_feedback(
-                    self._game,
-                    f"The town has voted to put you on trial",
+                    target,
+                    f"Tribunal Alert",
+                    f"The town has voted to put you on trial!",
                 ))
                 return True
         return False
 
     def submit_trial_vote(self, voter: "Actor", voted: "Actor") -> None:
+        if voter == voted:
+            return
+
         self._trial_vote[voter] = voted
         self._skip_vote.discard(voter)
+        if self._anonymous:
+            name = "Somebody"
+        else:
+            name = voter.name
+
         if voted is None:
             self.messenger.queue_message(Message.indicate(
                 self._game,
-                f"{voter.name} has cleared their vote",
+                f"{name} has cleared their vote",
             ))
         else:
             self.messenger.queue_message(Message.indicate(
                 self._game,
-                f"{voter.name} has voted to put {voted.name} on trial",
+                f"{name} has voted to put {voted.name} on trial",
             ))
 
     def submit_skip_vote(self, voter: "Actor") -> None:
         self._trial_vote[voter] = None
+        if self._anonymous:
+            name = "Somebody"
+        else:
+            name = voter.name
         self._skip_vote.add(voter)
         self.messenger.queue_message(Message.indicate(
             self._game,
-            f"{voter.name} has voted to skip the day",
+            f"{name} has voted to skip the day",
         ))
 
     def submit_lynch_vote(self, voter: "Actor", vote: T.Optional[bool]) -> None:
         if self._on_trial == voter:
             return
-        self.messenger.queue_message(Message.indicate(self._game, f"{voter.name} has cast a ballot"))
+        if self._anonymous:
+            name = "Somebody"
+        else:
+            name = voter.name
+        self.messenger.queue_message(Message.indicate(self._game, f"{name} has cast a ballot"))
         self._lynch_vote[voter] = vote

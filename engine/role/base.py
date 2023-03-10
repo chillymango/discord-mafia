@@ -47,21 +47,21 @@ class Role:
         """
         This should describe the role's affiliation.
         """
-        if cls.affiliation == TOWN:
+        if cls.affiliation() == TOWN:
             return "You are a member of the Town. You do not know who your teammates are. You " + \
                 "must exercise caution, strategy, and teamwork to survive."
 
-        if cls.affiliation == MAFIA:
+        if cls.affiliation() == MAFIA:
             return "You are a member of the Mafia. A member of an organized crime family, you " + \
                 "should know who your teammates are. You must work together in secrecy to " + \
                 "eliminate all your opposition and come to rule this town."
 
-        if cls.affiliation == TRIAD:
+        if cls.affiliation() == TRIAD:
             return "You are a member of the Triad. A member of an organized crime family, you " + \
                 "should know who your teammates are. You must work together in secrecy to " + \
                 "eliminate all your opposition and come to rule this town."
 
-        if cls.affiliation == NEUTRAL:
+        if cls.affiliation() == NEUTRAL:
             return "You are a Neutral character. You are not affiliated with the Town, the Triad, " + \
                 "or the Mafia. You have your own specific win condition."
 
@@ -93,6 +93,17 @@ class Role:
         During game setup, more than one unique role will not be allowed to join the game.
         """
         return False
+
+    @classmethod
+    def name_repr(cls) -> str:
+        # TODO: replace `.name` with this
+        name = ""
+        for prev_char, next_char in zip(cls.__name__[:-1], cls.__name__[1:]):
+            name += prev_char
+            if prev_char == prev_char.lower() and next_char == next_char.upper():
+                name += " "
+        name += next_char
+        return name
 
     @property
     def name(self) -> str:
@@ -159,6 +170,7 @@ class Role:
         else:
             role.action_description = "You have no possible actions."
         role.affiliation = self.affiliation()
+        role.ability_uses = self._ability_uses
         return role
 
     @property

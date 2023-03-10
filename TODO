@@ -1,0 +1,67 @@
+# TODO List
+
+Here's a list of shit I should do
+
+## Features
+### Mechanics
+* [p0] CRIMES ARE MISSING BRO
+
+### Roles (these are all p[1])
+* Auditor
+* Witch
+* Bus Driver
+* Enchantress
+* Party Host
+* Triad Faction
+* Soldato?
+    * this one looks kinda dumb tbvh
+* Oracle (ayyy)
+* Amnesiac role
+* Executioner role
+* Cultists
+* Disguiser? I'm literally not sure how to do this though
+    * we could switch nicknames but if people clue onto this it's tough so almost definitely not
+* Arsonist
+
+### Game Buttons
+* [p1] Suicide button
+
+### Achievements!!!
+* [p2] Points system
+* [p2] Copy a bunch of the achievements from SC2 Mafia 
+
+### AI Improvements
+* [p0] Bots should never be assigned advanced roles
+* [p2] ChatGPT integration for decision making
+    * this may be a lot easier after game log? the thing is i feel like that's cheating
+    * since we're getting closer and closer to just telling chatgpt what to do straight up
+
+### QoL
+* [p0] Setup Config
+    * Config editor is [p2], would be nice to have, but editing a JSON for now should be OK
+* [p1] Flying windows?
+* [p2] Mobile experience?
+    * this one might just be kinda fucked for speed Mafia, maybe OK for forum Mafia
+* [p2] Target Titles for everybody
+
+### Maintenance
+* [p1] Unit tests for engine
+* [p2] Unit tests for Chat API (this seems harder to do)
+
+## Refactoring
+### p0 (this shit is beyond disgusting)
+* [p0] Game events / game log abstraction for events
+    * basically everything we do should emit an event and we should log it
+
+### p1 (it's not great but it's OK)
+* [p1] Jail should be its own class with game logic separated from rendering / Discord control
+* [p1] Server setup script
+
+### p2 (it's shameful but acceptable)
+* [p2] Chat controller type for TownHall, Court, Hideouts, etc.
+    * TownHall shouldn't control all of them probably
+* [p2] Cleanup dead files (e.g input_panel.py)
+
+## Balance / Design
+### Meta Analysis
+* [p1] What do we want setups to look like

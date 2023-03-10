@@ -1,6 +1,9 @@
 import random
 import typing as T
 
+from academy import ChatContext
+from academy import ChatGPTBot
+
 if T.TYPE_CHECKING:
     from donbot import DonBot
     from donbot.action import BotAction

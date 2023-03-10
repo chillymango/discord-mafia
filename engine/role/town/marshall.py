@@ -1,6 +1,7 @@
 import typing as T
 
 from engine.role.base import RoleGroup
+from engine.role.base import TargetGroup
 from engine.role.town import TownRole
 from engine.action.marshall import Marshall as MarshallAction
 
@@ -51,3 +52,10 @@ class Marshall(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_GOVERNMENT]
+
+    @property
+    def target_group(self) -> TargetGroup:
+        """
+        Most actions will target live players.
+        """
+        return TargetGroup.SELF

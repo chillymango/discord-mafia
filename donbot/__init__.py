@@ -2,6 +2,7 @@
 It's the Robot Mafia
 """
 import asyncio
+import logging
 import random
 import time
 import typing as T
@@ -9,9 +10,14 @@ import typing as T
 from grpc import aio
 from grpc import RpcError
 
+import log
 from donbot.action import BotAction
 from donbot.auto_ctx import AutomationContext
 from donbot.resolver import RandomResolver
+from engine.affiliation import MAFIA
+from engine.affiliation import NEUTRAL
+from engine.affiliation import TRIAD
+from engine.phase import TurnPhase
 from proto import command_pb2
 from proto import connect_pb2
 from proto import message_pb2
@@ -25,24 +31,50 @@ if T.TYPE_CHECKING:
 BIND = "localhost:50051"
 
 
+class DecisionState:
+    """
+    The bot should update this periodically as it goes through states.
+
+    A 1hz timer should be sufficient.
+
+    Hopefully this helps with latching for specific decisions that bots must make during
+    the decision making process.
+
+    TODO: with the below setup, bots won't ever perform day actions.
+
+    DAYLIGHT:
+        * are we suspicious of anybody?
+            * if yes, go to TRIBUNAL_SUSPECT
+        * if not, stay in this state
+    TRIBUNAL_SUSPECT:
+        * we should put up a trial vote for somebody
+    """
+
+
+class LogEvent:
+    """
+    Generic data object
+    """
+
+    def __init__(self, turn_number: int, turn_phase: TurnPhase, message: str) -> None:
+        self.turn_number = turn_number
+        self.turn_phase = turn_phase
+        self.message = message
+
+
 class DonBot:
     """
     Base class
 
     You come to me on the day of my robot daughter's wedding
-
-    OK so...
-    Procedure:
-    * start up
-    * Connect to app server
-    * do shit
-    * Disconnect from app server
     """
 
     def __init__(self, bot_name: str = None) -> None:
         self._connected = False
         self._bot_name: str = bot_name
         self._bot_id: str = None
+        self.log = logging.Logger(name=f"Bot {self._bot_name}")
+        self.log.addHandler(log.ch)
 
         # current state
         self._actor: state_pb2.Actor = None  # this is us
@@ -53,7 +85,33 @@ class DonBot:
         self._message_queue: asyncio.Queue[message_pb2.Message] = asyncio.Queue()
         self.setup_resolvers()
 
+        # these keep track of whether we've made decisions at each phase / turn num
+        self._action_decisions: T.Dict[T.Tuple[TurnPhase, int], T.List[str]] = dict()
+        self._trial_decisions: T.Dict[T.Tuple[TurnPhase, int], T.Optional[str]] = dict()
+        self._lynch_decisions: T.Dict[T.Tuple[TurnPhase, int], T.Optional[bool]] = dict()
+
+        self._action_results: T.Dict[T.Tuple[TurnPhase, int], str] = dict()
+
+        self._game_log: T.List[LogEvent] = list()
+        self._prev_last_will: str = ""
+
         self._should_exit = False
+
+    @property
+    def last_will(self) -> str:
+        """
+        Construct this from our game log
+        """
+        lw = ""
+        for log_event in self._game_log:
+            if log_event.turn_phase in (TurnPhase.DAYBREAK, TurnPhase.DAYLIGHT, TurnPhase.DUSK):
+                prefix = "D"
+            elif log_event.turn_phase in (TurnPhase.NIGHT, TurnPhase.NIGHT_SEQUENCE):
+                prefix = "N"
+            else:
+                prefix = "U"
+            lw += f"{prefix}{log_event.turn_number}: {log_event.message}\n"
+        return lw
 
     def setup_resolvers(self) -> None:
         self._random_resolver = RandomResolver()
@@ -61,12 +119,31 @@ class DonBot:
         self._resolvers = {ba: self._random_resolver for ba in BotAction}
 
     @property
+    def last_action_target(self) -> T.Optional[T.List[str]]:
+        """
+        Sorts action_decisions by turn number (and turn phase) and determines
+        the name of the last target selected.
+
+        Returns None if there have been no targets so far.
+        """
+        if not self._action_decisions:
+            return None
+
+        turns = list(self._action_decisions.keys())
+        turns.sort(reverse=True)
+        turn_key = turns[0]
+        return self._action_decisions.get(turn_key)
+
+    @property
     def name(self) -> str:
         if self._actor is None:
             return None
         return self._actor.player.name
 
-    @property
+    def record_event(self, event: str) -> None:
+        self._game_log.append(LogEvent(self._game.turn_number, TurnPhase[self._game.turn_phase], event))
+
+    @property 
     def role(self) -> state_pb2.Role:
         if self._actor is None:
             return None
@@ -81,10 +158,12 @@ class DonBot:
                 self._bot_name = response.bot_name
                 self._bot_id = response.bot_id
                 self._connected = True
+                self.log.name = self._bot_name
 
-                print("Successfully connected!")
+                self.log.info("Successfully connected!")
             except RpcError as error:
-                print(f"Error response: {repr(error)}")
+                self.log.exception(error)
+                self._should_exit = True
                 raise
 
     async def disconnect(self) -> None:
@@ -104,7 +183,7 @@ class DonBot:
                     self._bot_name = None
                     self._connected = False
             except RpcError as error:
-                print(f"Error response: {repr(error)}")
+                self.log.exception(error)
 
     async def get_game_state(self) -> state_pb2.Game:
         if not self._connected:
@@ -122,21 +201,24 @@ class DonBot:
                         break
                 else:
                     return False
+
+                self._actor = actor
                 if not actor.is_alive:
-                    print(f"Uh oh! We're dead!")
+                    self.log.info("Uh oh! We're dead!")
                     self._should_exit = True
                     return False
 
                 return True
             except RpcError as error:
-                print(f"Error response: {repr(error)}")
+                self.log.exception(error)
 
     def contextualize(self) -> T.Dict[BotAction, T.List[T.Any]]:
         # this gives us a list of possible bot actions
         autoctx = AutomationContext.create_from_game_proto(self._bot_name, self._game)
+        # we want to minimize the number of things we ask ChatGPT
+        # the random bot should just fill out a random instruction whenever it hits a junction
         bot_actions = autoctx.infer_actions()
         targets = autoctx.infer_targets(bot_actions)
-        print(f"Possible Actions: {bot_actions}\nPossible Targets: {targets}\n")
         return targets
 
     def plan_action(self, action_target: T.Dict[BotAction, T.List[T.Any]]) -> T.Tuple[BotAction, T.Any]:
@@ -151,43 +233,6 @@ class DonBot:
         target = self._resolvers[action].resolve(action_target[action])[0]
         return (action, target)
 
-    async def execute_action(self, action: BotAction, target: T.Any) -> None:
-        # now that we have an action and a target, we can execute it
-        if action is None:
-            print("Null Action?")
-            return
-
-        if action == BotAction.NO_OP:
-            print("No-Op action")
-            return
-        if action == BotAction.DAY_ACTION:
-            print("Day Target")
-            await self.target(target)
-            return
-        if action == BotAction.NIGHT_ACTION:
-            print("Night Target")
-            await self.target(target)
-            return
-        if action == BotAction.LYNCH_VOTE:
-            print("Lynch Vote")
-            await self.lynch_vote(target)
-            return
-        if action == BotAction.TRIAL_VOTE:
-            print("Trial Vote")
-            await self.trial_vote(target)
-            return
-        if action == BotAction.SKIP_VOTE:
-            print("Skip Vote")
-            await self.trial_vote(target)
-            return
-        if action == BotAction.SEND_PRIVATE_MESSAGE:
-            print("Private Message (TODO)")
-            return
-        if action == BotAction.SEND_PUBLIC_MESSAGE:
-            print("Public Message (TODO)")
-            return
-        print(f"Bot Action: {action.name} Unhandled")
-
     async def establish_identity(self) -> None:
         async with aio.insecure_channel(BIND) as channel:
             stub = service_pb2_grpc.GrpcBotApiStub(channel)
@@ -195,9 +240,9 @@ class DonBot:
                 response: state_pb2.GetActorResponse = await \
                     stub.GetActor(state_pb2.GetActorRequest(timestamp=time.time(), bot_id=self._bot_id))
                 self._actor = response.actor
-                print(f"My name is {self.name}. My role is {self.role.name}")
+                self.log.info(f"I am a {self.role.name}")
             except RpcError as error:
-                print(f"Error response: {repr(error)}")
+                self.log.exception(error)
 
     async def subscribe_messages(self) -> None:
         self._subscribe_task = asyncio.create_task(self.subscribe_task())
@@ -209,6 +254,7 @@ class DonBot:
 
         Probably want to just run this in the background or something
         """
+        self.log.info("Subscribing to messages")
         async with aio.insecure_channel(BIND) as channel:
             stub = service_pb2_grpc.GrpcBotApiStub(channel)
             call: UnaryStreamCall = stub.SubscribeMessages(
@@ -217,21 +263,18 @@ class DonBot:
                     bot_id=self._bot_id
                 )
             )
-            consecutive_fails = 0
+
+            # read until we need to exit...?
             while True:
                 try:
                     response: message_pb2.SubscribeMessagesResponse = await call.read()
                     for msg in response.messages:
                         self._message_queue.put_nowait(msg)
-                    consecutive_fails = 0
                 except RpcError as error:
-                    print(f"Error in subscribe messages: {repr(error)}")
-                    consecutive_fails += 1
-                    if consecutive_fails > 3:
-                        # TODO: look for a way to see if RPC was cancelled from server
-                        break
+                    self.log.exception(error)
+                    asyncio.sleep(1.0)
                 except asyncio.CancelledError:
-                    print(f"Let's bounce")
+                    self.log.info("Exiting subscribe messages")
                     break
 
     async def print_message_task(self) -> None:
@@ -241,17 +284,39 @@ class DonBot:
         while True:
             try:
                 msg = await self._message_queue.get()
-                print(f"[{self.name} | {self.role.name}] {msg.message}")
+                # feed resolver with this information
+                # if it's an action feedback, update last will
+                await self._maybe_record_feedback(msg)
             except asyncio.CancelledError:
                 break
 
-    def print_all_messages(self) -> None:
+    async def _maybe_record_feedback(self, msg: message_pb2.Message) -> None:
         """
-        Clear the message queue and print all messages.
+        Inspect the received message and see if it has information
+        that should be added to the game event log.
         """
-        while not self._message_queue.empty():
-            msg = self._message_queue.get_nowait()
-            print(f"[{self.name} | {self.role.name}] {msg.message}")
+        if msg.source == message_pb2.Message.FEEDBACK:
+            # if the report is that we died, skip it
+            if "killed" in msg.title.lower() or "neutralized" in msg.title.lower():
+                return
+
+            # associate this with last known action target
+            self.log.info(f"Message feedback: {msg}")
+            _, _, result = msg.message.rpartition(':')
+            self.record_event(result)
+            await self._maybe_update_last_will()
+
+    async def _maybe_update_last_will(self) -> None:
+        """
+        If our last will has changed, update it on server as well
+        """
+        if self._actor.role.affiliation in (MAFIA, TRIAD, NEUTRAL):
+            # neuts (even benigns) and evils never leave a LW
+            return
+
+        if self.last_will != self._prev_last_will:
+            await self.update_last_will()
+            self._prev_last_will = self.last_will
 
     async def send_public_message(self, message: str) -> None:
         """
@@ -264,7 +329,7 @@ class DonBot:
                 response: message_pb2.SendMessageResponse = await \
                     stub.SendMessage(message_pb2.SendMessageRequest(timestamp=time.time(), bot_id=self._bot_id, message=to_send))
             except RpcError as error:
-                print(f"Error in send: response: {repr(error)}")
+                self.log.exception(error)
 
     async def trial_vote(self, target_name: str) -> None:
         """
@@ -279,7 +344,7 @@ class DonBot:
                     target_name=target_name
                 ))
             except RpcError as error:
-                print(f"Error in trial vote: {repr(error)}")
+                self.log.exception(error)
 
     async def lynch_vote(self, vote: bool) -> None:
         """
@@ -294,7 +359,7 @@ class DonBot:
                     vote=vote
                 ))
             except RpcError as error:
-                print(f"Error in lynch vote: {repr(error)}")
+                self.log.exception(error)
 
     async def skip_vote(self, vote: bool) -> None:
         """
@@ -309,19 +374,32 @@ class DonBot:
                     vote=vote
                 ))
             except RpcError as error:
-                print(f"Error in skip vote: {repr(error)}")
+                self.log.exception(error)
 
     async def target(self, target_name: str) -> None:
         async with aio.insecure_channel(BIND) as channel:
             stub = service_pb2_grpc.GrpcBotApiStub(channel)
             try:
-                await stub.DayTarget(command_pb2.TargetRequest(
+                response: command_pb2.TargetResponse = await stub.DayTarget(command_pb2.TargetRequest(
                     timestamp=time.time(),
                     bot_id=self._bot_id,
                     target_name=target_name
                 ))
+                self.log.info(f"I am targeting {target_name} with {self._actor.role.name} ability")
             except RpcError as error:
-                print(f"Error in target: {repr(error)}")
+                self.log.exception(error)
+
+    async def update_last_will(self) -> None:
+        async with aio.insecure_channel(BIND) as channel:
+            stub = service_pb2_grpc.GrpcBotApiStub(channel)
+            try:
+                await stub.LastWill(message_pb2.LastWillRequest(
+                    timestamp=time.time(),
+                    bot_id=self._bot_id,
+                    last_will=self.last_will
+                ))
+            except RpcError as error:
+                self.log.exception(error)
 
     async def inner(self) -> None:
         """
@@ -336,16 +414,87 @@ class DonBot:
         received shouldn't execute anything...
         """
         while not self._should_exit:
-            t_init = time.time()
+            # sleep on entry
+            await asyncio.sleep(3.0)
 
-            if await self.get_game_state():
-                action_target = self.contextualize()
-                if action_target:
-                    await self.execute_action(*self.plan_action(action_target))
-            t_final = time.time()
-            sleep_dur = random.random() * 10.0
-            print(f"Loop Duration: {t_final - t_init}. Sleeping for {sleep_dur}s")
-            await asyncio.sleep(sleep_dur)
+            # get the current game state
+            if not await self.get_game_state():
+                await asyncio.sleep(1.0)
+                continue
+
+            # how should trial voting be done?
+            # options are:
+            #   * lynch train
+            #       * AI will just follow onto who others vote for
+            #   * absolutely random
+            #       * AI will randomly pick a decision whenever it is available
+            #       * this decision should latch per turn
+            #       * ChatGPT will directly replace the questions we ask at each
+            #         stage, by asking for choices between trial votes, then lynch
+            #         vote.
+            #   * suspicion walk
+            #       * we pick someone to be suspicious of and traverse
+            #         a random walk that describes whether they are guilty.
+            #         the higher up we walk on the tree, the more harshly
+            #         we will vote for them
+            #       * this is probably good for getting a random bot to
+            #         behave in a consistent manner, but would probably be
+            #         assisting ChatGPT a little too much to make it interesting
+
+            # prioritize selecting actions if they are available
+            actions = self.contextualize()
+            if (self._game.turn_phase, self._game.turn_number) not in self._action_decisions:
+                if BotAction.DAY_ACTION in actions:
+                    # think about selecting a target
+                    targets = actions[BotAction.DAY_ACTION]
+                    if targets:
+                        # when playing randomly, day targets will often trigger
+                        # e.g MAYOR ON DAY 1 BABY
+                        selected = self._action_resolver.resolve(targets)
+                    else:
+                        selected = None
+                elif BotAction.NIGHT_ACTION in actions:
+                    targets = actions[BotAction.NIGHT_ACTION]
+                    if targets:
+                        # when playing randomly, day targets will often trigger
+                        # e.g MAYOR ON DAY 1 BABY
+                        selected = self._action_resolver.resolve(targets)
+                else:
+                    selected = None
+
+                if selected:
+                    self._action_decisions[(self._game.turn_phase, self._game.turn_number)] = selected
+                    await self.target(*selected)
+                    self.record_event(f"Targeted {', '.join(selected)}")
+
+            if (self._game.turn_phase, self._game.turn_number) not in self._trial_decisions:
+                if BotAction.TRIAL_VOTE in actions:
+                    # we will pick someone to become suspicious of and vote up
+                    # but also make sure that "No Vote" is an option
+                    targets = actions[BotAction.TRIAL_VOTE] + ['No Target']
+                    selected = self._action_resolver.resolve(targets)[0]  # force one resolve
+                    # this should always latch when we evaluate
+                    self._trial_decisions[(self._game.turn_phase, self._game.turn_number)] = selected
+                    if selected != 'No Target':
+                        # issue a trial vote
+                        await self.trial_vote(selected)
+                    else:
+                        self.log.info("Did not select a trial vote")
+
+            if (self._game.turn_phase, self._game.turn_number) not in self._lynch_decisions:
+                if BotAction.LYNCH_VOTE in actions:
+                    targets = actions[BotAction.LYNCH_VOTE]
+                    selected = self._action_resolver.resolve(targets)[0]  # force singular
+                    await self.lynch_vote(selected)
+                    self._lynch_decisions[(self._game.turn_phase, self._game.turn_number)] = selected
+
+            # one of the above (in sequence if applicable) should run, but
+            # then the loop should open to the other possible actions
+            # mostly though we're just doing communication down here with
+            # public and private messaging methods eventually.
+            # RandoBot has no reason to talk, but ChatGPT could choose to
+            # talk here if it wants.
+            await self._maybe_update_last_will()
 
     async def run(self) -> None:
         try:
@@ -353,5 +502,7 @@ class DonBot:
             await self.establish_identity()
             await self.subscribe_messages()
             await self.inner()
+        except Exception as exc:
+            self.log.exception(exc)
         finally:
             await self.disconnect()

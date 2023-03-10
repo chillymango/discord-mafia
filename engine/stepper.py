@@ -10,17 +10,56 @@ import time
 import typing as T
 from collections import defaultdict
 
+from engine.action.kill import Kill
+from engine.action.transform import ConsiglierePromote
+from engine.action.transform import MafiosoDemote
 from engine.message import Message
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
 from engine.resolver import SequenceEvent
+from engine.role.mafia.consigliere import Consigliere
+from engine.role.mafia.godfather import Godfather
+from engine.role.mafia.mafioso import Mafioso
 
 if T.TYPE_CHECKING:
+    from engine.actor import Actor
     from engine.game import Game
     from engine.message import Messenger
 
 
 Sleeper = T.Callable[[float], T.Union[None, T.Coroutine]]
+
+
+NONE = ""
+ONE_DEATH = "One of us was killed last night."
+SOME_DEATH = "Some of us did not survive the night."
+MANY_DEATH = "Many of us perished last night."
+MASS_DEATH = "A mass quantity of people died last night."
+MOST_DEATH = "Most of the entire town was wiped out last night."
+ARMAGEDDON = "A veritable Armageddon decimated the town last night."
+OBLITERATED = "Literally the entire town was obliterated last night."
+SHIT = "Your setup is shit."
+SOMETHING_WRONG = "Live Player counts are inconsistent. THIS IS A BUG."
+
+
+NIGHT_DEATH_COUNT_DESCRIPTION = {
+    0: NONE,
+    1: ONE_DEATH,
+    2: SOME_DEATH,
+    3: SOME_DEATH,
+    4: MANY_DEATH,
+    5: MANY_DEATH,
+    6: MASS_DEATH,
+    7: MASS_DEATH,
+    8: MOST_DEATH,
+    9: MOST_DEATH,
+    10: ARMAGEDDON,
+    11: ARMAGEDDON,
+    12: OBLITERATED,
+    13: OBLITERATED,
+    14: SHIT,
+    15: SHIT,
+}
 
 
 async def sleep_override(duration: float) -> T.Coroutine:
@@ -39,6 +78,8 @@ class Stepper:
         self._game = game
         self._config = config
         self._init_with_config()
+        self._live_player_count = len(self._game.get_live_actors())
+        self._reported_dead: T.Set["Actor"] = set()
 
     @property
     def messenger(self) -> "Messenger":
@@ -69,6 +110,7 @@ class Stepper:
         """
         print("Transitioning Post-Init to Daybreak")
         # phase advancing should be done last
+        self._live_player_count = len(self._game.get_live_actors())
         self._game.turn_phase = TurnPhase.DAYBREAK
 
     async def _to_daylight(self) -> None:
@@ -105,13 +147,29 @@ class Stepper:
             message=intro
         ))
         print("Transitioning to Daylight")
-        self._game.kill_report.transition()
-    
-        # TODO: coded transition durations
-        await self._flush_then_wait_for_min_time(3.0, self._daybreak_to_daylight)
-    
+
+        # dramatic effect!
+        await self._sleep(10.0)
+
+        curr_live = len(self._game.get_live_actors())
+        live_diff = self._live_player_count - curr_live
+        night_death_count_desc = NIGHT_DEATH_COUNT_DESCRIPTION.get(live_diff, SOMETHING_WRONG)
+        if night_death_count_desc != NONE:
+            self.messenger.queue_message(Message.announce(
+                self._game,
+                night_death_count_desc,
+            ))
+            await self._sleep(10.0)
+
+        # report all deaths
+        for msg in self._game.death_reporter.release_all_new_deaths():
+            self.messenger.queue_message(msg)
+            await self._sleep(8.0)
+
         # phase advancing should be done last
         self._game.turn_phase = TurnPhase.DAYLIGHT
+
+        await self._sleep(5.0)
 
     async def _to_dusk(self) -> None:
         """
@@ -121,8 +179,11 @@ class Stepper:
         """
         print("Transitioning to Dusk")
         # Tribunal object should be driving most of the interaction during Daylight
-        await self._game.tribunal.do_daylight()
-        await self._flush_then_wait_for_min_time(2.0, 0.0)
+        # TODO: this is such a shitty hack
+        if not self._sleep == sleep_override:
+            await self._game.tribunal.do_daylight()
+            self._game.tribunal.reset()
+            await self._flush_then_wait_for_min_time(10.0, 0.0)
 
         # phase advancing should be done last
         self._game.turn_phase = TurnPhase.DUSK
@@ -133,20 +194,10 @@ class Stepper:
 
         Handle dusk to night transition
         """
-        # put somebody in jail lol
         print("Transitioning to Night")
+        # tally player count here so we know how many died
+        self._live_player_count = len(self._game.get_live_actors())
 
-        await self._flush_then_wait_for_min_time(2.0, self._dusk_to_night)
-    
-        # phase advancing should be done last
-        self._game.turn_phase = TurnPhase.NIGHT
-
-    async def _to_night_sequence(self) -> None:
-        """
-        Phase: Night
-
-        Handle night to night sequence transition
-        """
         outro = random.choice([
             "As the sun sinks beneath the horizon, the moon ascends into the sky, "
             "casting a soft, ethereal glow across the world.",
@@ -169,16 +220,89 @@ class Stepper:
             "As the sun bids farewell to the day, the moon rises to cast its enchanting "
             "spell over the world, a gentle reminder of the beauty that exists in the darkness.",
         ])
+
         self.messenger.queue_message(Message.announce(
             self._game,
             title=f"Night {self._game.turn_number}",
             message=outro
         ))
+
+        await self._flush_then_wait_for_min_time(10.0, self._dusk_to_night)
+
+        events: T.List[SequenceEvent] = list()
+        for actor in self._game.get_live_actors():
+    
+            actor.reset_health()
+    
+            for action_class in actor.role.day_actions():
+                # TODO: kinda inefficient but whatevs hack it
+                action = action_class()
+                events.append(SequenceEvent(action, actor))
+    
+        # process events in order -- group them by ORDER attribute value
+        grouped_events: T.Dict[int, T.List[SequenceEvent]] = defaultdict(list)
+        for event in events:
+            grouped_events[event.action.ORDER].append(event)
+    
+        for order_key in sorted(grouped_events.keys()):
+            print(f"Doing events for {order_key}")
+            # prune at each distinct order key value
+            # this is done in order to make sure that kills process before investigative actions
+            # and that downstream actions are never processed by dead people
+            # upstream actions like bus driving and roleblocking will still apply though
+            #
+            # all kill actions should process simultaneously
+            # e.g if vigilante and mafioso both target each other, they should both die, instead
+            # of leaving one of them to get resolved first, and one of them alive as a result
+            valid_events = [ev for ev in grouped_events[order_key] if ev.actor.is_alive]
+            for ev in valid_events:
+                ev.execute()
+
+        # after this is done, reset everyone's targets
+        for actor in self._game.get_live_actors():
+            actor.reset_target()
+
+        # convert Mafia members if necessary
+        valid_mafia = self._game.get_live_mafia_actors(shuffle=True)
+        to_promote = None
+        actor = None
+        for actor in valid_mafia:
+            if isinstance(actor.role, Consigliere):
+                to_promote = actor
+            if isinstance(actor.role, Godfather):
+                break
+            if isinstance(actor.role, Mafioso):
+                break
+        else:
+            # check for consigliere
+            if to_promote is not None:
+                to_promote.choose_targets(to_promote)
+                SequenceEvent(ConsiglierePromote(), to_promote).execute()
+                to_promote.reset_target()
+            # promote mafia if any left
+            elif actor is not None:
+                actor.choose_targets(actor)
+                SequenceEvent(MafiosoDemote(), actor).execute()
+                actor.reset_target()
+            else:
+                print("No valid promotions?")
+
+        await asyncio.sleep(3.0)
+
+        # phase advancing should be done last
+        self._game.turn_phase = TurnPhase.NIGHT
+
+    async def _to_night_sequence(self) -> None:
+        """
+        Phase: Night
+
+        Handle night to night sequence transition
+        """
         print("Night to Night Sequence")    
         # TODO: coded transition durations
         # the primary messages that may accumulate here are appropriate to collect at the end
         # of the NIGHT phase
-        await self._flush_then_wait_for_min_time(2.0, self._night_duration)
+        await self._flush_then_wait_for_min_time(15.0, self._night_duration)
     
         # phase advancing should be done last
         self._game.turn_phase = TurnPhase.NIGHT_SEQUENCE
@@ -226,7 +350,10 @@ class Stepper:
         for actor in self._game.get_live_actors():
             # TODO: something that manages this for us would be nice?
             actor.consume_vest()
-    
+            actor.reset_target()
+
+        self._game._jail_map = dict()
+
         # phase advancing should be done last
         self._game.turn_phase = TurnPhase.DAYBREAK
         self._game.turn_number += 1

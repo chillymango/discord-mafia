@@ -6,8 +6,7 @@ Information bots
 import asyncio
 import typing as T
 
-from chatapi.discord.driver import DiscordDriver
-from chatapi.discord.driver import WebhookDriver
+from chatapi.discord.driver import BotMessageDriver
 from engine.message import Message
 
 if T.TYPE_CHECKING:
@@ -38,6 +37,8 @@ class BotApi:
 
         self._reservations: T.Set["BotUser"] = set()
 
+        self._bot_drivers: T.Dict[BotUser, BotMessageDriver] = dict()
+
     @property
     def game(self) -> "Game":
         return self._game
@@ -54,6 +55,20 @@ class BotApi:
     def reserved_bots(self) -> T.Set["BotUser"]:
         # return a shallow copy
         return set(self._reservations)
+
+    def get_bot_driver_by_id(self, bot_id: str) -> BotMessageDriver:
+        """
+        Cache this internally so we don't have to keep looking it up lol
+        """
+        bot = self.get_bot_by_id(bot_id)
+        if bot not in self._bot_drivers:
+            for driver in self._game.messenger._drivers:
+                if isinstance(driver, BotMessageDriver) and driver._actor.name == bot.name:
+                    break
+            else:
+                raise ValueError(f"No bot driver for bot id {bot_id}")
+            self._bot_drivers[bot] = driver
+        return self._bot_drivers[bot]
 
     def get_bot_by_id(self, bot_id: str) -> T.Optional["BotUser"]:
         for bot in self._bots:
@@ -133,9 +148,7 @@ class BotApi:
         Issue a private message to the person with specified name.
         """
 
-    def trial_vote(self, bot_id: str, target_name: str) -> None:
-        """
-        Put someone on trial.
-
-        I guess we could use the Webhook driver instaed of the Discord driver?
-        """
+    def submit_last_will(self, bot_id: str, last_will: str) -> None:
+        bot = self.get_bot_by_id(bot_id)
+        actor = self._game.get_actor_by_name(bot.name, raise_if_missing=True)
+        actor._last_will = last_will

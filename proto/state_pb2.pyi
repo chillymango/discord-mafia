@@ -76,16 +76,18 @@ class Player(_message.Message):
     def __init__(self, name: _Optional[str] = ..., is_bot: bool = ..., is_human: bool = ...) -> None: ...
 
 class Role(_message.Message):
-    __slots__ = ["action_description", "affiliation", "name", "role_description"]
+    __slots__ = ["ability_uses", "action_description", "affiliation", "name", "role_description"]
+    ABILITY_USES_FIELD_NUMBER: _ClassVar[int]
     ACTION_DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     AFFILIATION_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     ROLE_DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    ability_uses: int
     action_description: str
     affiliation: str
     name: str
     role_description: str
-    def __init__(self, name: _Optional[str] = ..., affiliation: _Optional[str] = ..., role_description: _Optional[str] = ..., action_description: _Optional[str] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., affiliation: _Optional[str] = ..., role_description: _Optional[str] = ..., action_description: _Optional[str] = ..., ability_uses: _Optional[int] = ...) -> None: ...
 
 class Tombstone(_message.Message):
     __slots__ = ["epitaph", "player"]
@@ -96,16 +98,18 @@ class Tombstone(_message.Message):
     def __init__(self, player: _Optional[_Union[Player, _Mapping]] = ..., epitaph: _Optional[str] = ...) -> None: ...
 
 class Tribunal(_message.Message):
-    __slots__ = ["lynch_votes", "skip_votes", "state", "trial_votes"]
+    __slots__ = ["lynch_votes", "on_trial", "skip_votes", "state", "trial_votes"]
     LYNCH_VOTES_FIELD_NUMBER: _ClassVar[int]
+    ON_TRIAL_FIELD_NUMBER: _ClassVar[int]
     SKIP_VOTES_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
     TRIAL_VOTES_FIELD_NUMBER: _ClassVar[int]
     lynch_votes: _containers.RepeatedCompositeFieldContainer[VoteCount]
+    on_trial: Actor
     skip_votes: int
     state: str
     trial_votes: _containers.RepeatedCompositeFieldContainer[VoteCount]
-    def __init__(self, state: _Optional[str] = ..., trial_votes: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ..., lynch_votes: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ..., skip_votes: _Optional[int] = ...) -> None: ...
+    def __init__(self, state: _Optional[str] = ..., trial_votes: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ..., lynch_votes: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ..., skip_votes: _Optional[int] = ..., on_trial: _Optional[_Union[Actor, _Mapping]] = ...) -> None: ...
 
 class VoteCount(_message.Message):
     __slots__ = ["count", "player"]

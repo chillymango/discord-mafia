@@ -19,4 +19,6 @@ service GrpcBotApi {
     // TODO: i think we just need one, client doesn't care if it's day or night
     rpc DayTarget(TargetRequest) returns (TargetResponse) { }
     rpc NightTarget(TargetRequest) returns (TargetResponse) { }
+
+    rpc LastWill(LastWillRequest) returns (LastWillResponse) { }
 }

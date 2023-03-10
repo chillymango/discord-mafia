@@ -58,7 +58,7 @@ class AutomationContext:
 
     @property
     def role(self) -> T.Optional[T.Type["Role"]]:
-        return NAME_TO_ROLE.get(self.actor.role.name)
+        return NAME_TO_ROLE.get(self.actor.role.name.replace(' ', ''))
 
     def infer_actions(self) -> T.List[BotAction]:
         """
@@ -74,23 +74,26 @@ class AutomationContext:
             actions.extend([BotAction.SEND_PUBLIC_MESSAGE, BotAction.SEND_PRIVATE_MESSAGE])
             if self.role is None:
                 print("Role unknown. Assuming no actions.")
-            elif len(self.role.day_actions()) > 0:
+            elif len(self.role.day_actions()) > 0 and self.actor.role.ability_uses != 0:
                 actions.append(BotAction.DAY_ACTION)
 
             if self.tribunal_state == TribunalState.TRIAL_VOTE:
                 actions.extend([BotAction.TRIAL_VOTE, BotAction.SEND_PUBLIC_MESSAGE])
+            if self.tribunal_state == TribunalState.TRIAL_DEFENSE:
+                pass
             if self.tribunal_state == TribunalState.LYNCH_VOTE:
                 actions.extend([BotAction.LYNCH_VOTE, BotAction.SEND_PUBLIC_MESSAGE])
 
         elif self.turn_phase == TurnPhase.NIGHT:
             if self.role is None:
                 print("Role unknown. Assuming no actions.")
-            elif len(self.role.night_actions()) > 0:
+            elif len(self.role.night_actions()) > 0 and self.actor.role.ability_uses != 0:
                 actions.append(BotAction.NIGHT_ACTION)
 
         return actions
 
     def get_targets(self, as_str: bool = True) -> T.List[str]:
+        # these are all protos lol
         if self.actor.is_alive:
             role = self.role({})
             if role.target_group == TargetGroup.LIVE_PLAYERS:
@@ -98,19 +101,19 @@ class AutomationContext:
             elif role.target_group == TargetGroup.DEAD_PLAYERS:
                 targets = [ac for ac in self.actors if not ac.is_alive]
             elif role.target_group == TargetGroup.LIVING_NON_MAFIA:
-                targets = [ac for ac in self.actors if ac.is_alive and ac.role.affiliation() == MAFIA]
+                targets = [ac for ac in self.actors if ac.is_alive and ac.role.affiliation != MAFIA]
             elif role.target_group == TargetGroup.LIVING_NON_TRIAD:
-                targets = [ac for ac in self.actors if ac.is_alive and ac.role.affiliation() == TRIAD]
+                targets = [ac for ac in self.actors if ac.is_alive and ac.role.affiliation != TRIAD]
             elif role.target_group == TargetGroup.SELF:
-                targets = [self]
+                targets = [self.actor]
             else:
                 targets = []
 
             # manually handle self-targeting
-            if role.allow_self_target and self not in targets:
-                targets.append(self)
-            elif not role.allow_self_target and self in targets:
-                targets.remove(self)
+            if role.allow_self_target and self.actor not in targets:
+                targets.append(self.actor)
+            elif not role.allow_self_target and self.actor in targets:
+                targets.remove(self.actor)
             
             if as_str:
                 return [targ.player.name for targ in targets]
@@ -137,15 +140,20 @@ class AutomationContext:
             if action in (
                 BotAction.SEND_PRIVATE_MESSAGE,
                 BotAction.SEND_PUBLIC_MESSAGE,
-                BotAction.TRIAL_VOTE,
             ):
                 # TODO: eventually will need to block if we get blackmailed or something
                 # but for now I'm very happy to just ignore that
                 targets[action] = [ac.player.name for ac in self.actors if ac.is_alive]
                 continue
 
+            if action == BotAction.TRIAL_VOTE:
+                targets[action] = [ac.player.name for ac in self.actors if ac.is_alive]
+                if self.bot_name in targets[action]:
+                    targets[action].remove(self.bot_name)
+                continue
+
             # boolean(ish) choice
-            if action in (BotAction.LYNCH_VOTE,BotAction.SKIP_VOTE):
+            if action in (BotAction.LYNCH_VOTE, BotAction.SKIP_VOTE):
                 targets[action] = [True, False, None]
                 continue
 

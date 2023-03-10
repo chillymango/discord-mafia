@@ -13,6 +13,7 @@ class ChannelManager:
     
     def __init__(self) -> None:
         self._channels: T.Dict[str, "disnake.TextChannel"] = dict()
+        self._preserve: T.Dict["disnake.TextChannel", bool] = dict()
 
     async def create_channel(self, guild: "disnake.Guild", name: str, **kwargs) -> disnake.TextChannel:
         """
@@ -27,6 +28,9 @@ class ChannelManager:
         Return a channel if it exists.
         """
         return self._channels.get(name)
+
+    def mark_to_preserve(self, channel: "disnake.TextChannel") -> None:
+        self._preserve[channel] = True
 
     def _remove_if_exists(self, channel: "disnake.TextChannel") -> bool:
         return self._channels.pop(channel.name, None) is not None
@@ -56,8 +60,15 @@ class ChannelManager:
     async def shutdown(self) -> None:
         """
         Delete all channels
+
+        TODO: i don't think we need to do this actually...
+        maybe just rename them on game finish?
         """
-        await asyncio.gather(*[ch.delete() for ch in self._channels.values()])
+        to_delete: T.List["disnake.TextChannel"] = []
+        for ch in self._channels.values():
+            if not self._preserve.get(ch, False):
+                to_delete.append(ch)
+        await asyncio.gather(*[ch.delete() for ch in to_delete])
 
 
 channel_manager: ChannelManager = ChannelManager()

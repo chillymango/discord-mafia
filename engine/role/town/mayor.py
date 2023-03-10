@@ -1,6 +1,7 @@
 import typing as T
 
 from engine.action.mayor import Mayor as MayorAction
+from engine.role.base import TargetGroup
 from engine.role.base import RoleGroup
 from engine.role.town import TownRole
 
@@ -31,23 +32,31 @@ class Mayor(TownRole):
         """
         This should describe the day action at a high-level.
         """
-        return "Your role does not have a day action."
+        return "May reveal themselves during the day and thereafter have additional votes."
 
     @classmethod
     def night_action_description(cls) -> str:
         """
         This should describe the night action at a high-level.
         """
-        return "May reveal themselves during the day and thereafter have additional votes."
+        return "Your role does not have a night action."
 
     @classmethod
     def unique(cls) -> bool:
         return True
 
     @classmethod
-    def dayactions(cls) -> T.List["Action"]:
+    def day_actions(cls) -> T.List["Action"]:
         return [MayorAction]
 
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_GOVERNMENT]
+
+    @property
+    def target_group(self) -> TargetGroup:
+        """
+        Most actions will target live players.
+        """
+        return TargetGroup.SELF
+

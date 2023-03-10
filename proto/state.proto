@@ -26,6 +26,10 @@ message Role {
     // Action description (mostly for ChatGPT probably)
     string action_description = 4;
 
+    // Number of ability uses left.
+    // If set to -1, unlimited uses.
+    int32 ability_uses = 5;
+
 }
 
 // Basically just an association class in proto
@@ -67,6 +71,9 @@ message Tribunal {
 
     // skip vote count
     int32 skip_votes = 4;
+
+    // if someone is on trial, put them here
+    Actor on_trial = 5;
 }
 
 message GetGameRequest {

@@ -72,6 +72,11 @@ class GrpcBotApiStub(object):
                 request_serializer=command__pb2.TargetRequest.SerializeToString,
                 response_deserializer=command__pb2.TargetResponse.FromString,
                 )
+        self.LastWill = channel.unary_unary(
+                '/GrpcBotApi/LastWill',
+                request_serializer=message__pb2.LastWillRequest.SerializeToString,
+                response_deserializer=message__pb2.LastWillResponse.FromString,
+                )
 
 
 class GrpcBotApiServicer(object):
@@ -132,12 +137,19 @@ class GrpcBotApiServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def DayTarget(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """TODO: i think we just need one, client doesn't care if it's day or night
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def NightTarget(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def LastWill(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -200,6 +212,11 @@ def add_GrpcBotApiServicer_to_server(servicer, server):
                     servicer.NightTarget,
                     request_deserializer=command__pb2.TargetRequest.FromString,
                     response_serializer=command__pb2.TargetResponse.SerializeToString,
+            ),
+            'LastWill': grpc.unary_unary_rpc_method_handler(
+                    servicer.LastWill,
+                    request_deserializer=message__pb2.LastWillRequest.FromString,
+                    response_serializer=message__pb2.LastWillResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -395,5 +412,22 @@ class GrpcBotApi(object):
         return grpc.experimental.unary_unary(request, target, '/GrpcBotApi/NightTarget',
             command__pb2.TargetRequest.SerializeToString,
             command__pb2.TargetResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def LastWill(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/GrpcBotApi/LastWill',
+            message__pb2.LastWillRequest.SerializeToString,
+            message__pb2.LastWillResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

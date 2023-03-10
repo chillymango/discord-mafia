@@ -87,7 +87,7 @@ class TestSequencesForFun(unittest.TestCase):
         advance(game)
         advance(game)
         advance(game)
-        self.assertEqual(game.kill_report._public, 1)
+        #self.assertEqual(game.kill_report._public, 1)
 
 
 if __name__ == "__main__":

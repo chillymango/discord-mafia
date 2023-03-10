@@ -10,9 +10,11 @@ syntax = "proto3";
 message Message {
 
     enum MessageSource {
-        GAME = 0;
+        UNKNOWN = 0;
         PRIVATE = 1;
         PUBLIC = 2;
+        FEEDBACK = 3;
+        GAME = 4;
     }
 
     // timestamp at which the message was sent
@@ -22,6 +24,13 @@ message Message {
 
     // message content
     string message = 3;
+
+    // message title (if applicable)
+    string title = 4;
+
+    // game time
+    int32 turn_number = 5;
+    int32 turn_phase = 6;  // enumerated integer
 }
 
 // Fetch all messages
@@ -75,6 +84,22 @@ message SendMessageRequest {
 
 message SendMessageResponse {
     // timestamp at which the response was issued
+    float timestamp = 1;
+
+    bool success = 2;
+
+    string error = 3;
+}
+
+message LastWillRequest {
+    float timestamp = 1;
+
+    string bot_id = 2;
+
+    string last_will = 3;
+}
+
+message LastWillResponse {
     float timestamp = 1;
 
     bool success = 2;

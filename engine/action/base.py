@@ -58,9 +58,6 @@ class Action:
     def do_action(self, actor: "Actor") -> T.Optional[bool]:
         if not actor.targets:
             return None
-        valid = actor is not None and self.validate_targets(*actor.targets)
-        if not valid:
-            return None
         return self.action_result(actor, *actor.targets)
 
     def update_crimes(self, actor: "Actor", success: bool) -> None:
@@ -69,17 +66,20 @@ class Action:
         """
         actor.add_crimes(self.crimes.get(success, []))
 
+    def target_title(self, success: bool) -> str:
+        return "You've Been Targeted"
+
     def message_results(self, actor: "Actor", success: bool) -> None:
         messenger = actor.game.messenger
-        if success:
+        if success and self.feedback_text_success():
             messenger.queue_message(Message.private_feedback(actor, "Action Success", self.feedback_text_success()))
-        elif success == False:
+        elif success == False and self.feedback_text_fail():
             messenger.queue_message(Message.private_feedback(actor, "Action Failed", self.feedback_text_fail()))
         for targ in actor.targets:
-            if success:
-                messenger.queue_message(Message.private_feedback(targ, "You've Been Targeted", self.target_text_success()))
-            elif success == False:
-                messenger.queue_message(Message.private_feedback(targ, "You've Been Targeted", self.target_text_fail()))
+            if success and self.target_text_success():
+                messenger.queue_message(Message.private_feedback(targ, self.target_title(success), self.target_text_success()))
+            elif success == False and self.target_text_fail():
+                messenger.queue_message(Message.private_feedback(targ, self.target_title(success), self.target_text_fail()))
         if success and self.announce():
             # if there is text here it should be announced
             messenger.queue_message(Message.night_sequence(actor.game, self.announce()))
@@ -162,3 +162,5 @@ class TargetGroup(Enum):
     LIVING_NON_MAFIA = 2
     LIVING_NON_TRIAD = 3
     SELF = 4
+    JAIL = 5
+    VIGILANTE = 6

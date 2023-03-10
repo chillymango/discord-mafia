@@ -16,8 +16,8 @@ class Armor(Action):
         target.role.give_vest()
         return True
 
-    def target_text_success(self) -> str:
+    def feedback_text_success(self) -> str:
         return "You gave your target a bulletproof vest."
 
-    def feedback_text_success(self) -> str:
+    def target_text_success(self) -> str:
         return "Someone gave you a bulletproof vest."

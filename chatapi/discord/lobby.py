@@ -44,35 +44,53 @@ class JoinButton(disnake.ui.Button):
         await interaction.send("I acknowledge that you pressed the button")
 
 total_set = [
-    "Damian Lillard",
-    "Kevin Durant",
-    "Steph Curry",
-    "LeBron James",
-    "Goku",
-    "Vegeta",
-    "Simon the Digger",
-    "Kamina",
-    "Yoko",
-    "Zhuge Liang",
-    "Liu Bei",
-    "Cao Cao",
-    "Sun Quan",
-    "Zhou Yu",
-    "Zhao Yun",
-    "Dong Zhuo",
-    "Yuan Shao",
-    "Yuan Shu",
-    "Gongsun Zan",
-    "Napoleon Bonaparte",
-    "Arthur Wellington",
+    # Basketball
+    #"Damian Lillard",
+    #"Kevin Durant",
+    #"Steph Curry",
+    #"LeBron James",
+    # Anime
+    #"Goku",
+    #"Vegeta",
+    #"Simon the Digger",
+    #"Kamina",
+    #"Yoko",
+    # ROTK
+    #"Zhuge Liang",
+    #"Liu Bei",
+    #"Cao Cao",
+    #"Sun Quan",
+    #"Zhou Yu",
+    #"Zhao Yun",
+    #"Dong Zhuo",
+    #"Yuan Shao",
+    #"Yuan Shu",
+    #"Gongsun Zan",
+    # Famous Generals
+    #"Napoleon Bonaparte",
+    #"Arthur Wellington",
+    #"Alexander the Great",
+    # US Presidents
     "George Washington",
-    "Alexander the Great",
-    "Joe Biden",
-    "Donald Trump",
-    "Barack Obama",
-    "George W. Bush",
-    "Bill Clinton",
+    "Thomas Jefferson",
+    "James Madison",
+    "Abraham Lincoln",
+    "Theodore Roosevelt",
+    "William McKinley",
+    "Grover Cleveland",
+    "Woodrow Wilson",
+    "Franklin D. Roosevelt",
+    "Harry Truman",
+    "Dwight D. Eisenhower",
+    "John F. Kennedy",
+    "Richard Nixon",
+    "Jimmy Carter",
     "George H.W. Bush",
+    "Bill Clinton",
+    "George W. Bush",
+    "Barack Obama",
+    "Donald Trump",
+    "Joe Biden",
 ]
 random.shuffle(total_set)
 BOT_NAMES = set(total_set)
@@ -113,6 +131,24 @@ class NewLobby:
         router.register_button_custom_callback("add_bot", self.add_bot)
         router.register_button_custom_callback("remove_bot", self.remove_bot)
 
+    def validate(self, interaction: "disnake.Interaction") -> bool:
+        """
+        Check first to ensure that lobby host is issuing command
+        """
+        if interaction.user != self.host:
+            return False
+        return True
+
+    @property
+    def host(self) -> None:
+        """
+        First non-bot player
+        """
+        humans = [u for u in self.users if isinstance(u, disnake.Member) or isinstance(u, disnake.User)]
+        if not humans:
+            return None
+        return humans[0]
+
     async def add_player(self, interaction: "disnake.Interaction") -> None:
         user = interaction.user
         if user in self.users:
@@ -143,6 +179,10 @@ class NewLobby:
 
     async def start_game(self, interaction: "disnake.Interaction") -> None:
         # TODO: add support to specify config
+        if not self.validate(interaction):
+            print(f"someone naughty: {interaction.user.name}")
+            await interaction.send("Command only available to lobby host", ephemeral=True, delete_after=5.0)
+            return
         self._session = Session(self._guild)
         players = []
         for user in self.users:
@@ -168,6 +208,10 @@ class NewLobby:
         await self._session.start()
 
     async def close_lobby(self, interaction: "disnake.Interaction") -> None:
+        if not self.validate(interaction):
+            print(f"someone naughty: {interaction.user.name}")
+            await interaction.send("Command only available to lobby host", ephemeral=True, delete_after=5.0)
+            return
         self.state = LobbyState.CLOSED
         await interaction.send("Closing lobby")
         await self.panel.delete()
@@ -176,6 +220,11 @@ class NewLobby:
         """
         Add a fake bot player, add to 15 for testing I guess
         """
+        if not self.validate(interaction):
+            print(f"someone naughty: {interaction.user.name}")
+            await interaction.send("Command only available to lobby host", ephemeral=True, delete_after=5.0)
+            return
+
         bots_to_add = 15 - len(self.users)
         for _ in range(bots_to_add):
             name = BOT_NAMES.pop()
@@ -189,6 +238,12 @@ class NewLobby:
         """
         Remove a fake bot player
         """
+        if not self.validate(interaction):
+            import pdb; pdb.set_trace()
+            print(f"someone naughty: {interaction.user.name}")
+            await interaction.send("Command only available to lobby host", ephemeral=True, delete_after=5.0)
+            return
+
         # remove from bot list and roster
         removed = self.bots.pop()
         self.roster.remove(removed)

@@ -59,11 +59,6 @@ class Message:
     Messages consist of a real timestamp, a game timestamp, and a message string.
     """
 
-    DIRECTED_MESSAGE_TYPES = (
-        MessageType.PRIVATE_MESSAGE,
-        MessageType.PRIVATE_FEEDBACK
-    )
-
     def __init__(
         self,
         real_time: float,
@@ -95,6 +90,12 @@ class Message:
         return (f"[{self.real_timestamp}] ({self.turn_phase.name.capitalize()} "
                 f"{self.turn_number}): {self.message}")
 
+    def ai_repr(self) -> str:
+        """
+        Representation for bots?
+        """
+        return f"{self.title} - {self.message}".replace('*', '')
+
     @classmethod
     def announce(cls, game: "Game", title: str, message: str = "") -> "Message":
         return Message(
@@ -120,7 +121,7 @@ class Message:
         return Message(
             time.time(),
             (game.turn_number, game.turn_phase),
-            messasge=message,
+            title=message,
             message_type=MessageType.NIGHT_SEQUENCE,
         )
 
@@ -309,8 +310,6 @@ class Messenger:
 
         # primary queue we pull from
         self._message_queue: asyncio.Queue[Message] = asyncio.Queue()
-
-        #self._outbound_driver = outbound_driver
         self._drivers = drivers
         self._inbound_tasks: T.Set[asyncio.Task] = set()
 
@@ -329,7 +328,6 @@ class Messenger:
         """
         for driver in self._drivers:
             if driver.wants(message):
-                print(f"{driver.__class__.__name__}: {message}")
                 driver.add_to_queue(message)
 
     def start(self) -> None:
@@ -353,3 +351,27 @@ class Messenger:
             if isinstance(driver, klass):
                 return driver
         return None
+
+    def external_pm(self, from_name: str, to_name: str, message: str) -> bool:
+        """
+        Queue an inbound private message that comes from outside the typical game context.
+
+        Primary case right now is that the origin source is the /pm command
+
+        Returns True if successful and False if not
+        """
+        from_actor = self._game.get_actor_by_name(from_name)
+        to_actor = self._game.get_actor_by_name(to_name)
+
+        if from_actor is None or to_actor is None:
+            print(f"From actor or to_actor is None. From: {from_actor} | To: {to_actor}")
+            return False
+
+        # bruh
+        if from_actor == to_actor:
+            print(f"Sending to same person {from_actor}?")
+            return False
+
+        self.queue_message(Message.private_message(from_actor, to_actor, message))
+
+        return True

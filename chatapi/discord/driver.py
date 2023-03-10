@@ -53,7 +53,95 @@ class BotMessageDriver(OutboundMessageDriver):
         """
         All this does is make the message *availble* for gRPC to pick up.
         """
-        await self._grpc_queue.put(message)
+        self._grpc_queue.put_nowait(message)
+
+
+class MessageTunnel(OutboundMessageDriver):
+    """
+    Bridges two threads or channels.
+
+    Aliases by default will use the name of the original sender.
+    This can overridden with a mapping and a default.
+    """
+
+
+class ChatDriver(OutboundMessageDriver):
+    """
+    Drives messages to Chat
+
+    In this case, `Chat` will almost certainly just mean Court chat, unless
+    we come up with some other dumb Chat ideas
+    """
+
+    def __init__(self, game: "Game", channel: "disnake.TextChannel") -> None:
+        super().__init__()
+        self._game = game
+        self._channel = channel
+        self._webhook: "disnake.Webhook" = None
+        self._terminated = False
+        self._discussion_thread: "disnake.Thread" = None
+
+    def wants(self, message: "Message") -> bool:
+        """
+        We want all Botspeak messages and that's it
+        """
+        return message.message_type in (
+            MessageType.BOT_PUBLIC_MESSAGE,
+            MessageType.INDICATOR,
+        )
+
+    @classmethod
+    async def create_with_name(cls, game: "Game", channel: "disnake.TextChannel", name: str) -> "WebhookDriver":
+        driver = cls(game, channel)
+        await driver.setup_webhook(name)
+        return driver
+
+    async def setup_webhook(self, name: str):
+        self._webhook = await self._channel.create_webhook(name=name)
+
+    def set_discussion_thread(self, thread: "disnake.Thread") -> None:
+        self._discussion_thread = thread
+
+    def format_message(self, message: "Message") -> T.Dict[str, str]:
+        """
+        For now this should just implement Court chat?
+
+        Obscure the player name
+
+        TODO: the below logic feels like it might belong somewhere else
+        """
+        if message.addressed_from.role.name in ("Judge", "Crier"):
+            username = "Court"
+        else:
+            username = "Jury"
+
+        return dict(username=username, content=message.message)
+
+    def publish_from_external(self, sender_name: str, message: str) -> None:
+        """
+        Queue a message from the external API (slash command)
+        """
+        actor = self._game.get_actor_by_name(sender_name)
+        if actor is None:
+            print(f"No actor by name {sender_name}")
+            return
+        self.add_to_queue(Message.player_public_message(actor, message))
+
+    async def publish(self, message: "Message") -> None:
+        """
+        Aggressively drop messages if we are unable to publish.
+
+        This should be routed from internal messenger.
+        """
+        if self._webhook is None:
+            return
+        if self._discussion_thread is None:
+            return
+
+        try:
+            await self._webhook.send(thread=self._discussion_thread, **self.format_message(message))
+        except Exception as exc:
+            print(f"Failed in ChatDriver: {repr(exc)}")
 
 
 class OldBotMessageDriver(OutboundMessageDriver):
@@ -186,23 +274,35 @@ class WebhookDriver(InboundMessageDriver):
         self._discussion_thread = thread
 
     def format_message(self, message: "Message") -> T.Dict[str, T.Any]:
-        embed = disnake.Embed(title=message.title, description=message.message)
-        if message.addressed_from:
-            username = message.addressed_from.name
+        if message.message_type == MessageType.BOT_PUBLIC_MESSAGE:
+            return dict(content=message.message, username=message.addressed_from.name)
         else:
-            username = "Mafia Bot"
-        return dict(embed=embed, username=username)
+            embed = disnake.Embed(title=message.title, description=message.message)
+            if message.addressed_from:
+                username = message.addressed_from.name
+            else:
+                username = "Mafia Bot"
+            return dict(embed=embed, username=username)
 
     async def publish(self, message: "Message") -> None:
         try:
             if self._webhook is None:
                 return
             fmt = self.format_message(message)
-            if self._game.town_hall.discussion_thread:
-                fmt["thread"] = self._game.town_hall.discussion_thread
-            await self._webhook.send(**fmt)
+            t_init = time.time()
+            while time.time() - t_init < 60.0:  # this would be a real problem
+                if self._game.town_hall.discussion_thread is not None:
+                    thread = self._game.town_hall.discussion_thread
+                    break
+                # try again in a bit
+                await asyncio.sleep(1.0)
+
+            if thread is not None:
+                fmt["thread"] = thread
+                await self._webhook.send(**fmt)
+            # otherwise drop the message if we don't have a thread
         except Exception as exc:
-            print(repr(exc))
+            print(f"Failed to publish Webhook: {repr(exc)}")
 
 
 class DiscordPublicDriver(OutboundMessageDriver):
@@ -223,6 +323,24 @@ class DiscordPublicDriver(OutboundMessageDriver):
             MessageType.DEBUG,  # eek
             MessageType.NIGHT_SEQUENCE,
         )
+
+    async def run(self) -> None:
+        """
+        Public-facing driver probably needs a rate limit
+        Not more than one message every 5 seconds?
+        """
+        while True:
+            try:
+                msg = await self._queue.get()
+                t_init = time.time()
+                await self.publish(msg)
+                delta = time.time() - t_init
+                if delta > 5.0:
+                    print("WARNING: publish took longer than 5s")
+                else:
+                    await asyncio.sleep(5.0 - delta)
+            except asyncio.CancelledError:
+                break
 
     def format_message(self, message: "Message") -> T.Dict[str, T.Any]:
         embed = disnake.Embed(title=message.title, description=message.message)
@@ -248,7 +366,12 @@ class DiscordPrivateDriver(OutboundMessageDriver):
         return message.addressed_to == self._actor
 
     def format_message(self, message: "Message") -> T.Dict[str, T.Any]:
-        return dict(content=f"({message.addressed_from.name}): {str(message)}")
+        if message.message_type == MessageType.PRIVATE_FEEDBACK:
+            embed = disnake.Embed()
+            embed.title = message.title
+            embed.description = message.message
+            return dict(embed=embed)
+        return dict(content=f"(From **{message.addressed_from.name}**): {message.message}")
 
     async def publish(self, message: "Message") -> None:
         ia = icache.get(self._actor.player.user)
@@ -256,9 +379,11 @@ class DiscordPrivateDriver(OutboundMessageDriver):
             print(f"WARNING: no interaction for {self._actor.name}. Dropping private message")
 
         try:
-            await ia.send(**self.format_message(message))
-        except:
-            await ia.followup.send(**self.format_message(message))
+            print(f"Sending private message to {self._actor.name}")
+            await ia.send(**self.format_message(message), ephemeral=True)
+        except Exception as exc:
+            print(f"Throwing exception?: {repr(exc)}")
+            await ia.followup.send(**self.format_message(message), ephemeral=True)
 
 
 class DiscordDriver(OutboundMessageDriver):

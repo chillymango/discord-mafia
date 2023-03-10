@@ -2,6 +2,7 @@
 Data class which contains all information associated with an active player (actor)
 in a single game.
 """
+from contextlib import contextmanager
 import typing as T
 
 from engine.action.base import TargetGroup
@@ -13,6 +14,8 @@ from engine.affiliation import TRIAD
 from engine.crimes import Crime
 from engine.message import Message
 from engine.role.base import RoleGroup
+from engine.role.town.citizen import Citizen
+from engine.phase import TurnPhase
 from proto import state_pb2
 
 if T.TYPE_CHECKING:
@@ -20,7 +23,6 @@ if T.TYPE_CHECKING:
     from engine.game import Game
     from engine.player import Player
     from engine.role.base import Role
-    from engine.phase import TurnPhase
 
 
 class Actor:
@@ -41,10 +43,10 @@ class Actor:
         self._player = player
 
         # actual role
-        self._role = role
+        self._role: "Role" = role
 
-        # role presented on death
-        self._death_role = role
+        # role presented on death or on investigate
+        self._visible_role: "Role" = role if not role._detect_immune else Citizen
 
         # crimes that show up on standard investigate
         self._crimes = set()
@@ -52,8 +54,11 @@ class Actor:
         # last will (should be input by player)
         self._last_will = ""
 
-        # leave a note on kill
+        # this is the death note that the player will leave with another corpse
         self._death_note = ""
+
+        # this is the death note that was left with a player's corpse
+        self._corpse_death_note = ""
 
         # lynch vote
         self._lynch_vote: "Actor" = None
@@ -100,6 +105,11 @@ class Actor:
             return
         self.hitpoints = 1.0
         self._attacked_by = []
+        self._corpse_death_note = ""
+
+    @property
+    def is_jailed(self) -> bool:
+        return self._is_jailed
 
     @property
     def epitaph(self) -> str:
@@ -143,6 +153,15 @@ class Actor:
             self._vest_active = False
             self._role.consume_vest()
 
+    def set_investigated_role(self, role: "Role" = None) -> None:
+        """
+        If role is not provided, reset to real role
+        """
+        if role is None:
+            self._visible_role = self._role
+        else:
+            self._visible_role = role
+
     @property
     def has_ability_uses(self) -> bool:
         return self._role._ability_uses != 0
@@ -175,23 +194,21 @@ class Actor:
         """
         Depending on game settings, return something for the investigative role exact check
         """
-        if self._role._detect_immune:
-            return "Citizen"
-        return self._role.__class__.__name__
+        return self._visible_role.name
 
     @property
     def investigated_suspicion(self) -> str:
         """
         Depending on game settings, return something for the investigative alignment check
         """
-        if not self._role._detect_immune and self.affiliation in NEUTRAL:
+        if not self._role._detect_immune and self.role.affiliation() in NEUTRAL:
             # detect exact for neutral killing if enabled
             if RoleGroup.NEUTRAL_KILLING in self._role.groups():
                 return self._role.__name__
             return "Not Suspicious"
 
-        if not self._role._detect_immune and self.affiliation in (MAFIA, TRIAD):
-            return self.affiliation
+        if not self._role._detect_immune and self.role.affiliation() in (MAFIA, TRIAD):
+            return self.role.affiliation()
         return "Not Suspicious"
 
     @property
@@ -201,7 +218,11 @@ class Actor:
         """
         if self._role._detect_immune:
             return TOWN
-        return self.affiliation
+        return self.role.affiliation()
+
+    @property
+    def in_jail(self) -> bool:
+        return self in self._game._jail_map.values()
 
     @property
     def game(self) -> "Game":
@@ -214,6 +235,14 @@ class Actor:
     @property
     def targets(self) -> T.List["Actor"]:
         return self._targets
+
+    @property
+    def death_note(self) -> str:
+        return self._death_note
+
+    @property
+    def corpse_death_note(self) -> str:
+        return self._corpse_death_note
 
     def get_target_options(self, as_str: bool = True) -> T.List["Actor"]:
         """
@@ -230,14 +259,32 @@ class Actor:
                 targets = self._game.get_live_non_triad_actors()
             elif self._role.target_group == TargetGroup.SELF:
                 targets = [self]
+            elif self._role.target_group == TargetGroup.JAIL:
+                if self._game.turn_phase in (TurnPhase.DAYBREAK, TurnPhase.DAYLIGHT, TurnPhase.DUSK):
+                    # during day, any live players
+                    targets = self._game.get_live_actors()
+                else:
+                    # during night, jailed target or nobody
+                    if self._game._jail_map.get(self) is not None:
+                        targets = [self._game._jail_map[self]]
+                    else:
+                        targets = []
+            elif self._role.target_group == TargetGroup.VIGILANTE:
+                # vig cannot target anyone on N1
+                if self._game.turn_number == 1:
+                    targets = []
+                else:
+                    targets = self._game.get_live_actors()
             else:
                 targets = []
 
             # manually handle self-targeting
-            if self._role.allow_self_target and self not in targets:
-                targets.append(self)
-            elif not self._role.allow_self_target and self in targets:
-                targets.remove(self)
+            # TODO: nested ifs are gross
+            if not self._role.target_group == TargetGroup.SELF:
+                if self._role.allow_self_target and self not in targets:
+                    targets.append(self)
+                elif not self._role.allow_self_target and self in targets:
+                    targets.remove(self)
             
             if as_str:
                 return [targ.name for targ in targets]
@@ -282,13 +329,6 @@ class Actor:
     def name(self) -> str:
         return self._player.name
 
-    @classmethod
-    def affiliation(self) -> str:
-        """
-        Get the actor's affiliation. This may change if role changes (e.g amnesiac)
-        """
-        return self._role.affiliation()
-
     def lynch(self) -> None:
         """
         Add the lynch action and then execute a kill
@@ -296,12 +336,43 @@ class Actor:
         self._attacked_by = [Lynch]
         self.kill()
 
+    @property
+    def lynched(self) -> bool:
+        return Lynch in self._attacked_by
+
+    def leave_death_note(self, note: str) -> None:
+        """
+        Leaves a death note with the body
+
+        The first death note after a kill succeeds each night should latch.
+        The latch is reset when health resets. This should only be done if
+        the player survives the night. The death note should correspond to
+        the first action that successfully kills the actor.
+        """
+        if self._corpse_death_note:
+            return
+        self._corpse_death_note = note
+
     def kill(self) -> None:
+        if not self.is_alive:
+            # stop he's already dead
+            return
+
         print(f"Killed {self}")
         self._is_alive = False
         # NOTE: we should be able to generate tombstone here since all protective
         # actions should act *before* kills take place
         self._game.update_graveyard(self)
+        # we also set the visible role to their real role
+        # other actions can override this later for further deception, e.g "Diva" or "Janitor"
+        self._visible_role = self._role
+
+    @contextmanager
+    def target_ctx(self, *targets: "Actor") -> T.Iterator[None]:
+        try:
+            self.choose_targets(*targets)
+        finally:
+            self.reset_target()
 
     @property
     def player(self) -> "Player":

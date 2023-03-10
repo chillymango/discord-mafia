@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 import typing as T
 
@@ -7,6 +8,8 @@ from chatapi.discord.webhook import don_bot_message
 from engine.actor import Actor
 from engine.message import Message
 from engine.message import MessageType
+from engine.resolver import SequenceEvent
+import log
 from proto import command_pb2
 from proto import service_pb2_grpc
 from proto import connect_pb2
@@ -19,18 +22,111 @@ if T.TYPE_CHECKING:
     from chatapi.app.bot_api import BotApi
     from engine.message import Messenger
 
+logger = logging.getLogger(name=__name__)
+logger.addHandler(log.ch)
+
+
+# TODO: replace message object with this
+class MessageExport:
+
+    @classmethod
+    def create(cls, message: "Message") -> message_pb2.Message:
+        if message.message_type == MessageType.ANNOUNCEMENT:
+            return cls.create_announcement(message)
+        if message.message_type == MessageType.BOT_PUBLIC_MESSAGE:
+            return cls.create_bot_public_message(message)
+        if message.message_type == MessageType.PLAYER_PUBLIC_MESSAGE:
+            return cls.create_player_public_message(message)
+        if message.message_type == MessageType.PRIVATE_MESSAGE:
+            return cls.create_private_message(message)
+        if message.message_type == MessageType.PRIVATE_FEEDBACK:
+            return cls.create_private_feedback(message)
+        if message.message_type == MessageType.INDICATOR:
+            return cls.create_indicator(message)
+        if message.message_type == MessageType.NIGHT_SEQUENCE:
+            return cls.create_night_sequence(message)
+        print(f"Unknown message type {message.message_type.name}")
+        raise ValueError(f"Unknown message type {message.message_type.name}")
+
+    @classmethod
+    def create_announcement(cls, message: "Message") -> message_pb2.Message:
+        return message_pb2.Message(
+            timestamp=message.real_time,
+            source=message_pb2.Message.GAME,
+            message=message.message,
+            title=message.title,
+            turn_number=message.turn_number,
+            turn_phase=message.turn_phase.value,
+        )
+
+    @classmethod
+    def create_bot_public_message(cls, message: "Message") -> message_pb2.Message:
+        return message_pb2.Message(
+            timestamp=message.real_time,
+            source=message_pb2.Message.PUBLIC,
+            message=f"{message.addressed_from.name}:{message.message}",
+            turn_number=message.turn_number,
+            turn_phase=message.turn_phase.value,
+        )
+
+    @classmethod
+    def create_player_public_message(cls, message: "Message") -> message_pb2.Message:
+        return message_pb2.Message(
+            timestamp=message.real_time,
+            source=message_pb2.Message.PUBLIC,
+            message=f"{message.addressed_from.name}:{message.message}",
+            turn_number=message.turn_number,
+            turn_phase=message.turn_phase.value,
+        )
+
+    @classmethod
+    def create_private_message(cls, message: "Message") -> message_pb2.Message:
+        return message_pb2.Message(
+            timestamp=message.real_time,
+            source=message_pb2.Message.PRIVATE,
+            message=f"{message.addressed_from.name}:{message.message}",
+            turn_number=message.turn_number,
+            turn_phase=message.turn_phase.value,
+        )
+
+    @classmethod
+    def create_private_feedback(cls, message: "Message") -> message_pb2.Message:
+        print(f"Driving private feedback: {message}")
+        return message_pb2.Message(
+            timestamp=message.real_time,
+            source=message_pb2.Message.FEEDBACK,
+            title=message.title,
+            message=message.message,
+            turn_number=message.turn_number,
+            turn_phase=message.turn_phase.value,
+        )
+
+    @classmethod
+    def create_indicator(cls, message: "Message") -> message_pb2.Message:
+        return message_pb2.Message(
+            timestamp=message.real_time,
+            source=message_pb2.Message.GAME,
+            title=message.title,
+            message=message.message,
+            turn_number=message.turn_number,
+            turn_phase=message.turn_phase.value,
+        )
+
+    @classmethod
+    def create_night_sequence(cls, message: "Message") -> message_pb2.Message:
+        return message_pb2.Message(
+            timestamp=message.real_time,
+            source=message_pb2.Message.GAME,
+            message=f"{message.title}:{message.message}",
+            turn_number=message.turn_number,
+            turn_phase=message.turn_phase.value,
+        )
+
 
 class GrpcBotApi(service_pb2_grpc.GrpcBotApiServicer):
 
     _bot_api: T.Optional["BotApi"] = None
     _subscribed: T.Set["BotUser"] = set()
-
-    @property
-    def driver(self) -> "BotMessageDriver":
-        driver: BotMessageDriver = self._bot_api.game.messenger.get_driver_by_class(BotMessageDriver)
-        if driver is None:
-            raise ValueError("Game does not have a bot driver setup yet.")
-        return driver
 
     def set_bot_api(self, api: "BotApi") -> None:
         self._bot_api = api
@@ -73,8 +169,8 @@ class GrpcBotApi(service_pb2_grpc.GrpcBotApiServicer):
         """
         bot = self.get_bot(request.bot_id)
         self._bot_api.check_in_bot(bot.name)
-        print(f"Disconnected. {self._bot_api.reserved_bots or 'No'} bots being held.\n"
-              f"{[bot.name for bot in self._bot_api.free_bots]} are free.")
+        logger.debug(f"Disconnected. {self._bot_api.reserved_bots or 'No'} bots being held.\n"
+                     f"{[bot.name for bot in self._bot_api.free_bots]} are free.")
 
         response = connect_pb2.DisconnectResponse()
         response.timestamp = time.time()
@@ -114,50 +210,22 @@ class GrpcBotApi(service_pb2_grpc.GrpcBotApiServicer):
 
         I guess we could just make it yield fake messages as a test
         """
-        bot = self.get_bot(request.bot_id)
-
-        # TODO: add exit criteria
-        self._subscribed.add(bot)
-        while bot in self._subscribed:
-            # ordering between public / private doesn't matter
-            # get all the messages we can
-            msgs = []
-            while not self.driver._queue.empty():
-                game_msg = self.driver._queue.get_nowait()
-                # make the message proto
-                if game_msg.message_type in (
-                    MessageType.ANNOUNCEMENT,
-                    MessageType.NIGHT_SEQUENCE,
-                    MessageType.INDICATOR
-                ):
-                    source = message_pb2.Message.GAME
-                elif game_msg.message_type in (
-                    MessageType.BOT_PUBLIC_MESSAGE,
-                    MessageType.PLAYER_PUBLIC_MESSAGE
-                ):
-                    source = message_pb2.Message.PUBLIC
-                elif game_msg.message_type in (
-                    MessageType.PRIVATE_FEEDBACK,
-                    MessageType.PRIVATE_MESSAGE,
-                ):
-                    source = message_pb2.Message.PRIVATE
-                else:
-                    # default to game message
-                    print(f"WARNING: unhandled message type {game_msg.message_type}. "
-                           "Defaulting to GAME.")
-                    source = message_pb2.Message.GAME
-
-                proto_msg = message_pb2.Message(
-                    timestamp=time.time(),
-                    source=source,
-                    message=str(game_msg),
-                )
-
-                msgs.append(proto_msg)
-
-            response = message_pb2.SubscribeMessagesResponse(timestamp=time.time(), messages=msgs)
-
-            yield response
+        driver = self._bot_api.get_bot_driver_by_id(request.bot_id)
+        while True:
+            try:
+                # we send one message every second as a keep-alive i guess?
+                msgs = []
+                while driver._grpc_queue.qsize() > 0:
+                    game_msg = driver._grpc_queue.get_nowait()
+                    msgs.append(MessageExport.create(game_msg))
+                    logger.info(f"Outbound to {driver._actor.name}: {game_msg}")
+                    print(f"(DTW) Outbound to {driver._actor.name}: {game_msg}")
+                response = message_pb2.SubscribeMessagesResponse(timestamp=time.time(), messages=msgs)
+                yield response
+            except Exception as exc:
+                logger.exception(exc)
+            finally:
+                await asyncio.sleep(1.0)
 
     def SendMessage(self, request: message_pb2.SendMessageRequest, context) -> message_pb2.SendMessageResponse:
         # this is where the fun begins?
@@ -166,14 +234,17 @@ class GrpcBotApi(service_pb2_grpc.GrpcBotApiServicer):
         return message_pb2.SendMessageResponse(timestamp=time.time(), success=True)
 
     def submit_target(self, request: command_pb2.TargetRequest, api_call: T.Callable) -> command_pb2.TargetResponse:
-        print("\tSubmitting target")
         bot = self.get_bot(request.bot_id)
         bot_actor = self._bot_api.game.get_actor_by_name(bot.name)
-        print("\tGot actor")
-        voted_actor = self._bot_api.game.get_actor_by_name(request.target_name)
-        print("\tGot target")
+        voted_actor = self._bot_api.game.get_actor_by_name(request.target_name, raise_if_missing=True)
         api_call(bot_actor, voted_actor)
-        print("\tMade call")
+        try:
+            for action in bot_actor.role.day_actions() + bot_actor.role.night_actions():
+                if action.instant():
+                    SequenceEvent(action(), voted_actor).execute()
+        except Exception as exc:
+            logger.exception(exc)
+
         return command_pb2.TargetResponse(timestamp=time.time())
 
     def TrialVote(self, request: command_pb2.TargetRequest, context) -> command_pb2.TargetResponse:
@@ -191,11 +262,15 @@ class GrpcBotApi(service_pb2_grpc.GrpcBotApiServicer):
         self._bot_api.game.tribunal.submit_skip_vote(bot_actor, request.vote)
         return command_pb2.TargetResponse(timestamp=time.time())
 
-    def DayTarget(self, request: command_pb2.BoolVoteRequest, context) -> command_pb2.BoolVoteResponse:
+    def DayTarget(self, request: command_pb2.TargetRequest, context) -> command_pb2.BoolVoteResponse:
         return self.submit_target(request, Actor.choose_targets)
 
-    def NightTarget(self, request: command_pb2.BoolVoteRequest, context) -> command_pb2.BoolVoteResponse:
+    def NightTarget(self, request: command_pb2.TargetRequest, context) -> command_pb2.BoolVoteResponse:
         return self.submit_target(request, Actor.choose_targets)
+
+    def LastWill(self, request: message_pb2.LastWillRequest, context) -> message_pb2.LastWillResponse:
+        self._bot_api.submit_last_will(request.bot_id, request.last_will)
+        return message_pb2.LastWillResponse(timestamp=time.time(), success=True)
 
 
 # TODO: split this by game eventually, but

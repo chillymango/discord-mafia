@@ -4,10 +4,12 @@ from engine.role.base import RoleGroup
 from engine.role.mafia import MafiaRole
 
 
-class Beguiler(MafiaRole):
+class Framer(MafiaRole):
     """
-    Hide behind somebody each night.
+    Give someone a random crime
     """
+
+    default_ability_uses = 3
 
     @classmethod
     def role_description(cls) -> str:

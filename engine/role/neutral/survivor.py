@@ -1,12 +1,19 @@
 import typing as T
+
 from engine.action.base import ActionSequence
 from engine.role.base import RoleGroup
 from engine.role.neutral import NeutralRole
+from engine.wincon import WinCondition
+from engine.wincon import SurvivorWin
 
 
 class Survivor(NeutralRole):
 
     default_vests = 4
+
+    @classmethod
+    def win_condition(cls) -> T.Type[WinCondition]:
+        return SurvivorWin
 
     @classmethod
     def role_description(cls) -> str:

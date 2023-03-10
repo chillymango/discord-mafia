@@ -8,3 +8,4 @@ FastAPI
 uvicorn
 pydantic
 grpcio-tools
+openai
