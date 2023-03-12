@@ -12,6 +12,8 @@ from engine.role.mafia.consort import Consort
 # way anyways LOL
 from engine.role.mafia.janitor import Janitor
 from engine.role.mafia.mafioso import Mafioso
+from engine.role.neutral.auditor import Auditor
+from engine.role.neutral.judge import Judge
 from engine.role.neutral.serialkiller import SerialKiller
 from engine.role.neutral.massmurderer import MassMurderer
 
@@ -49,11 +51,13 @@ class Frame(Action):
 
         evil_roles = (
             Agent,
+            Auditor,
             Beguiler,
             Blackmailer,
             Consigliere,
             Consort,
             Janitor,
+            Judge,
             Mafioso,
             SerialKiller,
             MassMurderer

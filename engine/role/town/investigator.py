@@ -2,6 +2,7 @@ import typing as T
 
 from engine.action.base import ActionSequence
 from engine.action.investigate import InvestigateCrimes
+from engine.action.investigate import PreInvestigate
 from engine.role.base import RoleGroup
 from engine.role.town import TownRole
 
@@ -41,7 +42,7 @@ class Investigator(TownRole):
 
     @classmethod
     def night_actions(cls) -> ActionSequence:
-        return [InvestigateCrimes]
+        return [PreInvestigate, InvestigateCrimes]
 
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:

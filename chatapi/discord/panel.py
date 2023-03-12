@@ -1147,33 +1147,6 @@ class VictoryPanel(PublicGamePanel):
             self._embed.add_field(name=winner.name, value=winner.role.name, inline=False)
 
 
-class CourtPanel(PrivateGamePanel):
-    """
-    This shows up if the Judge calls Court.
-
-    All inputs to the discussion thread will be listed as "Jury", except for the
-    Judge and the Crier who can post as "Court".
-
-    "Court" chat at night should just go to the primary?
-    """
-
-    @property
-    def court_chat_id(self) -> str:
-        return f"court-chat-{self._actor.name}"
-
-    def initialize(self) -> None:
-        self._embed = disnake.Embed()
-        self._embed.title = "Court Has Been Called"
-        self._embed.description = "When Court is in session, chat and voting are fully anonymous. " + \
-            "Additionally, the Judge gains extra votes."
-        self._chat_row = disnake.ui.ActionRow()
-        self._chat_row.add_text_input(
-            label="Enter Chat Here",
-            custom_id=self.court_chat_id,
-            style=disnake.TextInputStyle.single_line
-        )
-
-
 class JailPanel(NightPanel):
     """
     This should be shown to the Jailor and allow them to choose to execute

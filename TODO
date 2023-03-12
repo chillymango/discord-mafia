@@ -5,6 +5,10 @@ Here's a list of shit I should do
 ## Features
 ### Mechanics
 * [p0] CRIMES ARE MISSING BRO
+    * investigator will not trigger crimes on themselves?
+    * we can make crimes proc before action results go...?
+    * never mind we can't because we need action result first
+    * that means that investigator needs two actions, PreInvestigate and Investigate, where PreInvestigate will just leave a trespassing crime
 * [p1] Status ailments
     * can implement silencing, dousing, etc. this way
     * dynamic criteria that persist against an Actor model
@@ -27,7 +31,6 @@ Here's a list of shit I should do
 * Arsonist
 
 ### Game Buttons
-* [p0] Skip Day vote button
 * [p1] Suicide button
 
 ### Achievements!!!

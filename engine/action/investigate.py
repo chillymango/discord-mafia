@@ -56,6 +56,21 @@ class InvestigateSuspicion(Action):
         return True
 
 
+class PreInvestigate(Action):
+    """
+    Leave crimes for the investigator role.
+    """
+
+    ORDER = 999
+
+    @property
+    def crimes(self) -> T.Dict[bool, T.Iterable[Crime]]:
+        return {True: [Crime.TRESPASSING], False: [Crime.TRESPASSING]}
+
+    def target_text_success(self) -> str:
+        return ""
+
+
 class InvestigateExact(Action):
     """
     Discover exact role of target
