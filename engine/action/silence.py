@@ -22,7 +22,7 @@ class Silence(Action):
 
     def target_text_success(self) -> str:
         return f"A sinister man approached you and threatened to reveal some hideous " + \
-            "secrets of yours!"
+            "secrets of yours! You've been silenced. You cannot talk during the next day."
 
     def target_title(self, success: bool) -> str:
         return "You've Been Blackmailed"

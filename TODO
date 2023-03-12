@@ -5,6 +5,9 @@ Here's a list of shit I should do
 ## Features
 ### Mechanics
 * [p0] CRIMES ARE MISSING BRO
+* [p1] Status ailments
+    * can implement silencing, dousing, etc. this way
+    * dynamic criteria that persist against an Actor model
 
 ### Roles (these are all p[1])
 * Auditor
@@ -24,6 +27,7 @@ Here's a list of shit I should do
 * Arsonist
 
 ### Game Buttons
+* [p0] Skip Day vote button
 * [p1] Suicide button
 
 ### Achievements!!!
@@ -37,6 +41,7 @@ Here's a list of shit I should do
     * since we're getting closer and closer to just telling chatgpt what to do straight up
 
 ### QoL
+* [p0] 
 * [p0] Setup Config
     * Config editor is [p2], would be nice to have, but editing a JSON for now should be OK
 * [p1] Flying windows?
@@ -61,7 +66,10 @@ Here's a list of shit I should do
 * [p2] Chat controller type for TownHall, Court, Hideouts, etc.
     * TownHall shouldn't control all of them probably
 * [p2] Cleanup dead files (e.g input_panel.py)
+* [p2] protos everywhere
+    * all data objects going forward should inherit from the appropriate proto model
 
-## Balance / Design
+## Balance / Game Design
 ### Meta Analysis
 * [p1] What do we want setups to look like
+* [p1] Standard list of setups for speed vs forum Mafia

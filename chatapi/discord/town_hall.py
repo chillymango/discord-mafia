@@ -12,6 +12,8 @@ import disnake
 import typing as T
 
 from chatapi.discord.channel import channel_manager
+from chatapi.discord.forward import ForwardChatMessages
+from chatapi.discord.hideout import DeathChat
 from chatapi.discord.hideout import Jail
 from chatapi.discord.hideout import MafiaHideout
 from chatapi.discord.panel import setup_lwdn_modal
@@ -24,6 +26,7 @@ from chatapi.discord.panel import NightPanel
 from chatapi.discord.panel import TribunalPanel
 from chatapi.discord.panel import WelcomePanel
 from chatapi.discord.panel import VictoryPanel
+from chatapi.discord.panel import PossibleRolesPanel
 from chatapi.discord.permissions import LIVE_PLAYER
 from chatapi.discord.permissions import MAFIA_LIVE
 from chatapi.discord.permissions import PermissionsManager
@@ -71,6 +74,8 @@ class TownHall:
 
         self._is_silenced: T.Dict["Actor", bool] = dict()
 
+        self._public_forward = ForwardChatMessages(self._game, self.ch_bulletin)
+
         self._court: Court = None
         self._hideouts: T.List[Hideout] = []
 
@@ -83,6 +88,10 @@ class TownHall:
 
         self._welcome = {
             actor: WelcomePanel(actor, self._game, self.ch_bulletin)
+            for actor in self._game.get_actors() if actor.player.is_human
+        }
+        self._possible_role_panels = {
+            actor: PossibleRolesPanel(actor, self._game, self.ch_bulletin)
             for actor in self._game.get_actors() if actor.player.is_human
         }
         self._graveyard = GraveyardPanel(self._game, self.ch_bulletin)
@@ -98,6 +107,9 @@ class TownHall:
 
     async def display_welcome(self) -> None:
         await asyncio.gather(*[panel.drive() for panel in self._welcome.values()])
+
+    async def display_role_setup(self) -> None:
+        await asyncio.gather(*[panel.drive() for panel in self._possible_role_panels.values()])
 
     async def prepare_for_game(self) -> None:
         """
@@ -137,6 +149,7 @@ class TownHall:
         self._hideouts.extend([
             await MafiaHideout.create_and_init(self._game, self.ch_bulletin),
             await Jail.create_and_init(self._game, self.ch_bulletin),
+            await DeathChat.create_and_init(self._game, self.ch_bulletin),
         ])
         for hideout in self._hideouts:
             hideout.start()
@@ -261,10 +274,13 @@ class TownHall:
             thread_name = f"Day {self._game.turn_number} Discussion"
             thread_msg = await self.ch_bulletin.send(content=thread_name)
             self._discussion_thread = await self.ch_bulletin.create_thread(name=thread_name, message=thread_msg)
+            self._public_forward.channel = self._discussion_thread
+            self._public_forward.enable_forwarding()
 
         elif self._game.turn_phase == TurnPhase.DUSK:
             if self._discussion_thread is not None:
                 print("Locking discussion thread")
+                self._public_forward.disable_forwarding()
                 await self._discussion_thread.edit(archived=True, locked=True)
                 self._discussion_thread = None
 

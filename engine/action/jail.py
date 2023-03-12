@@ -19,7 +19,7 @@ class Jail(Action):
     @property
     def crimes(self) -> T.Dict[bool, T.Iterable["Crime"]]:
         return {
-            True: [Crime.MURDER],
+            True: [Crime.KIDNAPPING],
             False: [Crime.TRESPASSING],
         }
 

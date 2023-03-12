@@ -431,6 +431,7 @@ class PrivateGamePanel(GamePanel):
     async def open_graveyard(self, interaction: "disnake.Interaction") -> None:
         gy = GraveyardPanel(self._game, self._channel, debug=self._debug)
         gy.initialize()
+        gy.update()
         await interaction.send(**gy.rehydrate(), ephemeral=True)
 
     async def open_lwdn(self, interaction: "disnake.Interaction") -> None:
@@ -599,7 +600,7 @@ class GraveyardPanel(PublicGamePanel):
         Can add fields with descriptions as we get them.
         """
         self._embed.title = "Graveyard"
-        self._embed.description = "A list of players that have been eliminated from the game will be below."
+        self._embed.description = "No players have died yet."
         self._embed.clear_fields()
 
     def is_active(self) -> bool:
@@ -622,6 +623,10 @@ class GraveyardPanel(PublicGamePanel):
         Look at game's tombstones and update the fields
         """
         self._embed.clear_fields()
+        if self._game.graveyard:
+            self._embed.description = "No players have died yet."
+        else:
+            self._embed.description = ""
         for tombstone in self._game.graveyard:
             if tombstone.turn_phase in (TurnPhase.DAYBREAK, TurnPhase.DAYLIGHT, TurnPhase.DUSK):
                 phase_name = "Day"
@@ -657,7 +662,7 @@ class DayPanel(PrivateGamePanel):
     def is_active(self) -> bool:
         return self._game.game_phase == GamePhase.IN_PROGRESS and (
             self._game.turn_phase == TurnPhase.DAYLIGHT
-        ) and (self._actor.has_day_action)
+        )
 
     def setup_router(self) -> None:
         super().setup_router()
@@ -763,6 +768,10 @@ class TribunalPanel(PublicGamePanel):
     def trial_vote_id(self) -> str:
         return f"trial_vote"
 
+    @property
+    def skip_vote_id(self) -> str:
+        return f"skip-vote"
+
     def initialize(self) -> None:
         # keep track of row height
         # this is so that we do not shrink the box size too quickly
@@ -792,12 +801,18 @@ class TribunalPanel(PublicGamePanel):
             custom_id=f"{self.lynch_vote_abs_id}",
             label="Abstain"
         )
+        self._skip_vote_row = disnake.ui.ActionRow()
+        self._skip_vote_row.add_button(
+            custom_id=self.skip_vote_id,
+            label="Vote to Skip Day"
+        )
 
     def setup_router(self) -> None:
         router.register_string_custom_callback(self.trial_vote_id, self.update_trial_vote)
         router.register_button_custom_callback(self.lynch_vote_yes_id, self.lynch_vote_yes)
         router.register_button_custom_callback(self.lynch_vote_no_id, self.lynch_vote_no)
         router.register_button_custom_callback(self.lynch_vote_abs_id, self.lynch_vote_abstain)
+        router.register_button_custom_callback(self.skip_vote_id, self.skip_vote)
 
     def _update_embed(self) -> None:
         self._embed.title = f"Tribunal"
@@ -811,7 +826,7 @@ class TribunalPanel(PublicGamePanel):
 
     def _update_rows(self) -> None:
         if self._game.tribunal.state == TribunalState.TRIAL_VOTE:
-            self._components = [self._trial_vote_row]
+            self._components = [self._trial_vote_row, self._skip_vote_row]
             return
         if self._game.tribunal.state == TribunalState.LYNCH_VOTE:
             self._components = [self._lynch_vote_row]
@@ -822,6 +837,17 @@ class TribunalPanel(PublicGamePanel):
         self._update_embed()
         self._update_targets()
         self._update_rows()
+
+    async def skip_vote(self, interaction: "disnake.Interaction") -> None:
+        """
+        Update skip vote
+        """
+        actor = self._game.get_actor_by_name(interaction.user.name)
+        if not actor.is_alive:
+            await interaction.response.defer()
+            return
+        self._game.tribunal.submit_skip_vote(actor)
+        await interaction.response.defer()
 
     async def update_trial_vote(self, interaction: "disnake.Interaction") -> None:
         """
@@ -876,7 +902,7 @@ class NightPanel(PrivateGamePanel):
     def is_active(self) -> bool:
         return self._game.game_phase == GamePhase.IN_PROGRESS and (
             self._game.turn_phase == TurnPhase.NIGHT
-        ) and (self._actor.has_night_action or self._actor.vests)
+        )
 
     @property
     def night_target_id(self) -> str:
@@ -1175,3 +1201,27 @@ class JailPanel(NightPanel):
             await self._game.town_hall.signal_jail(self._actor, "**Jailor** has chosen to **execute** the prisoner.")
             self._actor.choose_targets(actor)
             await interaction.response.defer()
+
+
+class PossibleRolesPanel(PrivateGamePanel):
+    """
+    When a button is pressed on the day or night panels, this should show the possible roles.
+    """
+
+    def is_active(self) -> bool:
+        return True
+
+    def update_embed(self) -> None:
+        role = self._actor.role
+
+    def initialize(self) -> None:
+        self._embed = disnake.Embed()
+        self._embed.title = "**Setup Configuration**"
+        self._embed.description = "\n"
+        setup_config = self._game._config.get("setup")
+        if setup_config is None:
+            return
+        for role_spec in setup_config.get("role_list", []):
+            _, _, spec_name = role_spec.partition('::')
+            #self._embed.add_field(name=spec_name, value)
+            self._embed.description += f"- {spec_name}\n"

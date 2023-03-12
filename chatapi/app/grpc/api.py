@@ -91,7 +91,6 @@ class MessageExport:
 
     @classmethod
     def create_private_feedback(cls, message: "Message") -> message_pb2.Message:
-        print(f"Driving private feedback: {message}")
         return message_pb2.Message(
             timestamp=message.real_time,
             source=message_pb2.Message.FEEDBACK,
@@ -218,8 +217,6 @@ class GrpcBotApi(service_pb2_grpc.GrpcBotApiServicer):
                 while driver._grpc_queue.qsize() > 0:
                     game_msg = driver._grpc_queue.get_nowait()
                     msgs.append(MessageExport.create(game_msg))
-                    logger.info(f"Outbound to {driver._actor.name}: {game_msg}")
-                    print(f"(DTW) Outbound to {driver._actor.name}: {game_msg}")
                 response = message_pb2.SubscribeMessagesResponse(timestamp=time.time(), messages=msgs)
                 yield response
             except Exception as exc:

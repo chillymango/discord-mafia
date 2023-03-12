@@ -302,7 +302,7 @@ class Stepper:
         # TODO: coded transition durations
         # the primary messages that may accumulate here are appropriate to collect at the end
         # of the NIGHT phase
-        await self._flush_then_wait_for_min_time(15.0, self._night_duration)
+        await self._flush_then_wait_for_min_time(60.0, self._night_duration)
     
         # phase advancing should be done last
         self._game.turn_phase = TurnPhase.NIGHT_SEQUENCE

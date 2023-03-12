@@ -25,6 +25,17 @@ if T.TYPE_CHECKING:
     from engine.game import Game
 
 
+# do not give bots advanced roles
+BOT_BLOCKLIST = [
+    "Jailor",
+    "Kidnapper",
+    "Mayor",
+    "Constable",
+    "Marshall",
+    "Judge",
+]
+
+
 EXAMPLE_CONFIG = {
     "roles": {
         "Godfather": {
@@ -71,6 +82,8 @@ EXAMPLE_CONFIG = {
             "RoleName::Jester",
             "RoleName::Survivor",
             "RoleGroup::AnyRandom",
+            #"RoleGroup::AnyRandom",
+            #"RoleGroup::AnyRandom",
         ],
         # scalings for odds in RoleGroup selections
         # if the role is not listed, it's assumed to be 0

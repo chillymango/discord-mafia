@@ -212,6 +212,15 @@ class Tribunal(Component):
         """
         return math.floor(len(self._game.get_live_actors()) / 2) + 1
 
+    @property
+    def skip_quorum(self) -> int:
+        """
+        Skip quorum is human players
+
+        Should be floor(human_players / 2) + 1
+        """
+        return math.floor(len(self._game.get_live_human_actors()) / 2) + 1
+
     async def do_daylight(self) -> None:
         """
         Run the daylight procedures for the Tribunal
@@ -223,7 +232,7 @@ class Tribunal(Component):
         if self._skip_first_day and self._game.turn_number == 1:
             # pre-game discussion i guess
             # TODO: uncomment
-            await asyncio.sleep(7.0)
+            await asyncio.sleep(30.0)
             #self.messenger.queue_message(Message.announce(
             #    self._game,
             #    "We Will Reconvene Tomorrow",
@@ -249,6 +258,11 @@ class Tribunal(Component):
                         self._state = TribunalState.TRIAL_DEFENSE
                     
                 elif self.maybe_skip_day():
+                    self.messenger.queue_message(Message.announce(
+                        self._game,
+                        "Skip Day",
+                        "The town has voted to skip the day."
+                    ))
                     self._state = TribunalState.CLOSED
 
             elif self._state == TribunalState.TRIAL_DEFENSE:
@@ -284,9 +298,7 @@ class Tribunal(Component):
                         f"By a vote of {self.lynch_yes_votes} to {self.lynch_no_votes}\n"
                         f"{'' if self._anonymous else self.lynch_tally()}",
                     ))
-                    # if they're silenced, we should unsilence here
-                    self._game.town_hall.unsilence(self._on_trial)
-                    await self._sleep(8.0)
+                    await self._sleep(10.0)
                     self._state = TribunalState.LYNCH_VERDICT
                 else:
                     self.messenger.queue_message(Message.indicate(
@@ -296,7 +308,7 @@ class Tribunal(Component):
                         f"By a vote of {self.lynch_yes_votes} to {self.lynch_no_votes}\n"
                         f"{'' if self._anonymous else self.lynch_tally()}",
                     ))
-                    await self._sleep(8.0)
+                    await self._sleep(10.0)
                     self._state = TribunalState.TRIAL_VOTE
                 self.reset_votes()
 
@@ -314,6 +326,9 @@ class Tribunal(Component):
                 else:
                     self._state = TribunalState.CLOSED
                     break
+
+            elif self._state == TribunalState.CLOSED:
+                break
 
             # check ten times a second? ooooooof
             await self._sleep(0.1)
@@ -356,7 +371,7 @@ class Tribunal(Component):
     def skip_vote_counts(self) -> int:
         vote_count = 0
         for voter in self._skip_vote:
-            vote_count += self._skip_vote[voter]
+            vote_count += self._vote_count[voter]
         return vote_count
 
     @property
@@ -399,6 +414,8 @@ class Tribunal(Component):
         for actor in self._game.get_live_actors():
             # do not include dead players
             output += f"\t**{actor.name}**\n\t\t{self.trial_vote_counts.get(actor, 0)}\n"
+        if self.skip_vote_counts:
+            output += f"\t**Skip Votes**\n\t\t{self.skip_vote_counts}"
         return output
 
     def lynch_tally(self) -> str:
@@ -428,11 +445,7 @@ class Tribunal(Component):
 
         If the vote count has been met, return True to skip the day.
         """
-        if self.skip_vote_counts > self.trial_quorum:
-            self.messenger.queue_message(Message.indicate(
-                self._game,
-                f"The town has voted to skip today.",
-            ))
+        if self.skip_vote_counts >= self.skip_quorum:
             return True
         return False
 
@@ -483,11 +496,12 @@ class Tribunal(Component):
             name = "Somebody"
         else:
             name = voter.name
-        self._skip_vote.add(voter)
-        self.messenger.queue_message(Message.indicate(
-            self._game,
-            f"{name} has voted to skip the day",
-        ))
+        if voter not in self._skip_vote:
+            self._skip_vote.add(voter)
+            self.messenger.queue_message(Message.indicate(
+                self._game,
+                f"{name} has voted to skip the day",
+            ))
 
     def submit_lynch_vote(self, voter: "Actor", vote: T.Optional[bool]) -> None:
         if self._on_trial == voter:

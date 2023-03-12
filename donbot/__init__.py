@@ -69,12 +69,13 @@ class DonBot:
     You come to me on the day of my robot daughter's wedding
     """
 
-    def __init__(self, bot_name: str = None) -> None:
+    def __init__(self, bot_name: str = None, debug: bool = True) -> None:
         self._connected = False
         self._bot_name: str = bot_name
         self._bot_id: str = None
         self.log = logging.Logger(name=f"Bot {self._bot_name}")
         self.log.addHandler(log.ch)
+        self._debug = debug
 
         # current state
         self._actor: state_pb2.Actor = None  # this is us
@@ -83,7 +84,10 @@ class DonBot:
         self._subscribe_task: asyncio.Task = None
         self._print_task: asyncio.Task = None
         self._message_queue: asyncio.Queue[message_pb2.Message] = asyncio.Queue()
-        self.setup_resolvers()
+
+        self._outbound_queue: asyncio.Queue[str] = asyncio.Queue()
+
+        self._resolvers: T.Dict[BotAction, T.Callable] = dict()
 
         # these keep track of whether we've made decisions at each phase / turn num
         self._action_decisions: T.Dict[T.Tuple[TurnPhase, int], T.List[str]] = dict()
@@ -115,8 +119,8 @@ class DonBot:
 
     def setup_resolvers(self) -> None:
         self._random_resolver = RandomResolver()
-        self._action_resolver = self._random_resolver
-        self._resolvers = {ba: self._random_resolver for ba in BotAction}
+        self._action_resolver = self._random_resolver.resolve
+        self._resolvers = {ba: self._action_resolver for ba in BotAction}
 
     @property
     def last_action_target(self) -> T.Optional[T.List[str]]:
@@ -159,7 +163,6 @@ class DonBot:
                 self._bot_id = response.bot_id
                 self._connected = True
                 self.log.name = self._bot_name
-
                 self.log.info("Successfully connected!")
             except RpcError as error:
                 self.log.exception(error)
@@ -226,11 +229,11 @@ class DonBot:
         # if we're randomly picking we don't need a lot of info, all we really need is
         # the set of choices
         # first we need to pick the action to take
-        action = self._action_resolver.resolve(list(action_target.keys()))[0]
+        action = self._action_resolver(list(action_target.keys()))[0]
         if not action_target[action]:
             return (None, None)
 
-        target = self._resolvers[action].resolve(action_target[action])[0]
+        target = self._resolvers[action](action_target[action])[0]
         return (action, target)
 
     async def establish_identity(self) -> None:
@@ -247,6 +250,7 @@ class DonBot:
     async def subscribe_messages(self) -> None:
         self._subscribe_task = asyncio.create_task(self.subscribe_task())
         self._print_task = asyncio.create_task(self.print_message_task())
+        self._publish_task = asyncio.create_task(self.drive_outbound_task())
 
     async def subscribe_task(self) -> None:
         """
@@ -284,11 +288,24 @@ class DonBot:
         while True:
             try:
                 msg = await self._message_queue.get()
+                self.log.info(msg)
                 # feed resolver with this information
                 # if it's an action feedback, update last will
                 await self._maybe_record_feedback(msg)
             except asyncio.CancelledError:
                 break
+
+    async def drive_outbound_task(self) -> None:
+        """
+        Drive outbound messages
+        """
+        while True:
+            try:
+                msg_str = await self._outbound_queue.get()
+                self.log.info(f"Sending public message: {msg_str}")
+                await self.send_public_message(msg_str)
+            except Exception as exc:
+                self.log.exception(exc)
 
     async def _maybe_record_feedback(self, msg: message_pb2.Message) -> None:
         """
@@ -450,7 +467,7 @@ class DonBot:
                     if targets:
                         # when playing randomly, day targets will often trigger
                         # e.g MAYOR ON DAY 1 BABY
-                        selected = self._action_resolver.resolve(targets)
+                        selected = self._resolvers[BotAction.DAY_ACTION](targets)
                     else:
                         selected = None
                 elif BotAction.NIGHT_ACTION in actions:
@@ -458,34 +475,44 @@ class DonBot:
                     if targets:
                         # when playing randomly, day targets will often trigger
                         # e.g MAYOR ON DAY 1 BABY
-                        selected = self._action_resolver.resolve(targets)
+                        selected = self._resolvers[BotAction.NIGHT_ACTION](targets)
                 else:
                     selected = None
 
+                # always latch, even for AI - do not permit retargeting
+                self._action_decisions[(self._game.turn_phase, self._game.turn_number)] = selected
                 if selected:
-                    self._action_decisions[(self._game.turn_phase, self._game.turn_number)] = selected
-                    await self.target(*selected)
-                    self.record_event(f"Targeted {', '.join(selected)}")
+                    if selected == 'YES':
+                        await self.target(self._actor.player.name)
+                        self.record_event(f"Targeted {', '.join(selected)}")
 
             if (self._game.turn_phase, self._game.turn_number) not in self._trial_decisions:
                 if BotAction.TRIAL_VOTE in actions:
                     # we will pick someone to become suspicious of and vote up
                     # but also make sure that "No Vote" is an option
                     targets = actions[BotAction.TRIAL_VOTE] + ['No Target']
-                    selected = self._action_resolver.resolve(targets)[0]  # force one resolve
-                    # this should always latch when we evaluate
-                    self._trial_decisions[(self._game.turn_phase, self._game.turn_number)] = selected
-                    if selected != 'No Target':
+                    selected = self._resolvers[BotAction.TRIAL_VOTE](targets)
+                    if not selected:
+                        # this should always latch when we evaluate
+                        primary_target = None
+                    else:
+                        primary_target = selected[0]
+                    self._trial_decisions[(self._game.turn_phase, self._game.turn_number)] = primary_target
+                    if primary_target not in (None, 'No Target'):
                         # issue a trial vote
-                        await self.trial_vote(selected)
+                        await self.trial_vote(primary_target)
                     else:
                         self.log.info("Did not select a trial vote")
 
             if (self._game.turn_phase, self._game.turn_number) not in self._lynch_decisions:
                 if BotAction.LYNCH_VOTE in actions:
                     targets = actions[BotAction.LYNCH_VOTE]
-                    selected = self._action_resolver.resolve(targets)[0]  # force singular
-                    await self.lynch_vote(selected)
+                    selected = self._resolvers[BotAction.LYNCH_VOTE](targets)
+                    if not selected:
+                        primary_target = None
+                    else:
+                        primary_target = selected[0]
+                    await self.lynch_vote(primary_target)
                     self._lynch_decisions[(self._game.turn_phase, self._game.turn_number)] = selected
 
             # one of the above (in sequence if applicable) should run, but
@@ -500,6 +527,12 @@ class DonBot:
         try:
             await self.connect()
             await self.establish_identity()
+
+            while not await self.get_game_state():
+                await asyncio.sleep(1.0)
+
+            self.setup_resolvers()
+
             await self.subscribe_messages()
             await self.inner()
         except Exception as exc:

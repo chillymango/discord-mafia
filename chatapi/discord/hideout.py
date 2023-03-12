@@ -110,7 +110,6 @@ class Hideout:
                 await asyncio.sleep(1.0)
         except Exception as exc:
             print(repr(exc))
-            import pdb; pdb.set_trace()
 
 
 # lets just make one concrete version first
@@ -469,3 +468,43 @@ class Jail(Hideout):
         if not jailhouse:
             return
         await jailhouse.send(message)
+
+
+class DeathChat(Hideout):
+    """
+    Don't close until end of game
+
+    Add dead players
+    """
+
+    NAME = "godfathers-inferno"
+
+    @property
+    def is_open(self) -> bool:
+        return True
+
+    async def open(self) -> None:
+        """
+        Check for any dead players that are not in the chatroom
+        """
+        for actor in self._game.actors:
+            if actor.player.is_human and not actor.is_alive and actor not in self._in_chatroom:
+                await self._thread.add_user(actor.player.user)
+                self._in_chatroom.add(actor)
+
+    async def close(self) -> None:
+        await asyncio.gather(*[self._thread.remove_user(actor.player.user) for actor in self._in_chatroom])
+        self._in_chatroom = set()
+
+    async def run(self) -> None:
+        self._in_chatroom: T.Set["Actor"] = set()
+        try:
+            while not self._stop.is_set():
+                # check if we need to add anyone
+                if self.is_open:
+                    await self.open()
+                else:
+                    await self.close()
+                await asyncio.sleep(1.0)
+        except Exception as exc:
+            print(repr(exc))

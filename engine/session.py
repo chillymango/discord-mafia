@@ -92,15 +92,19 @@ class Session:
             await self._stepper.step()
 
         # step until daylight
-        while not self._game.turn_phase == TurnPhase.DAYLIGHT:
+        while not self._game.turn_phase in (TurnPhase.DAYLIGHT, TurnPhase.DUSK):
             await self._stepper.step()
 
     async def start(self) -> None:
         result, msg = do_setup(self._game)
         if not result:
             raise RuntimeError(f"Failed to setup game: {msg}")
-        self._game.debug_override_role("donbot", "Blackmailer")
-        self._game.debug_override_role("asiannub", "Escort")
+        #self._game.debug_override_role("donbot", "Blackmailer")
+        #self._game.debug_override_role("mmmmmmmmmmmmm", "Mayor")
+        #self._game.debug_override_role("pandomodger", "Judge")
+        #self._game.debug_override_role("mimitchi", "Jailor")
+        #self._game.debug_override_role("wagyu jubei", "Blackmailer")
+        #self._game.debug_override_role("asiannub", "Escort")
         #self._game.debug_override_role("wagyu jubei")
 
         #self._server_task = asyncio.create_task(run_grpc_server(self._game))
@@ -126,6 +130,10 @@ class Session:
         # start game
         self._game.game_phase = GamePhase.IN_PROGRESS
         await self._town_hall.display_welcome()
+
+        await asyncio.sleep(5.0)
+
+        await self._town_hall.display_role_setup()
 
         await asyncio.sleep(5.0)
 

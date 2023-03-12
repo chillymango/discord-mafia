@@ -328,6 +328,12 @@ def main() -> None:
             await asyncio.sleep(30.0)
             await thread.remove_user(interaction.user)
 
+        elif command == "hover-tip":
+            embed = disnake.Embed()
+            embed.title = "Testing a Tooltip"
+            embed.description = "[(Godfather)](https://www.google.com/ \"HEYAAAAA\")"
+            await interaction.send(embed=embed)
+
         elif command == "print-msg":
             #router.register_message_callback(interaction.channel.name, print_msg)
             await interaction.send("i'm printing messages")

@@ -147,6 +147,9 @@ class Game:
         print(f"Making {player_name} a {role_name}")
         actor._role = role
 
+    def get_live_human_actors(self) -> T.List["Actor"]:
+        return [actor for actor in self._actors if actor.is_alive and actor.player.is_human]
+
     def get_live_actors_by_role(self, role_klass: T.Type['Role']) -> T.List["Actor"]:
         return [actor for actor in self._actors if actor.is_alive and isinstance(actor.role, role_klass)]
 

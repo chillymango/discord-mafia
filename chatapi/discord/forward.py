@@ -1,6 +1,7 @@
 """
 Message forwarding to bot queues
 """
+from cachetools import TTLCache
 import typing as T
 
 from chatapi.discord.router import router
@@ -23,13 +24,15 @@ class ForwardChatMessages:
 
     def __init__(
         self,
-
         game: "Game",
         channel: "disnake.TextChannel",
     ):
         # TODO: should we forward directly to BotMessageDriver or go through Messenger?
         self._game = game
         self._channel = channel
+        # need to keep track of what messages we have seen
+        # TODO: i'm sure this is fine lol but maybe we need it bigger eventually
+        self._seen_messages: TTLCache = TTLCache(maxsize=10000, ttl=300)
 
     @property
     def messenger(self) -> "Messenger":
@@ -40,7 +43,7 @@ class ForwardChatMessages:
         return self._channel
 
     @channel.setter
-    def channel(self, new_channel: str) -> None:
+    def channel(self, new_channel: "disnake.TextChannel") -> None:
         self._channel = new_channel
 
     def enable_forwarding(self) -> None:
@@ -67,13 +70,16 @@ class ForwardChatMessages:
             # this shouldn't be going out anyways
             return
 
-        if message.author.bot and "Mafia" not in message.author.name:
-            actor = self._game.get_actor_by_name(message.author)
+        if message.id in self._seen_messages:
+            print(f"We've already seen message with id {message.id}")
+            return
+
+        self._seen_messages[message.id] = message
+
+        # THIS SHOULD ONLY FORWARD NON-BOT TRAFFIC
+        if not message.author.bot:
+            actor = self._game.get_actor_by_name(message.author.name)
             if actor is None:
                 print(f"Dropping forwarded message to {message.author.name}")
-            self.messenger.queue_message(Message.bot_public_message(actor, message.content))
-        elif not message.author.bot:
-            actor = self._game.get_actor_by_name(message.author)
-            if actor is None:
-                print(f"Dropping forwarded message to {message.author.name}")
+                return
             self.messenger.queue_message(Message.player_public_message(actor, message.content))

@@ -341,9 +341,9 @@ class Alert(MassMurder):
     @classmethod
     def kill_report_text(cls) -> str:
         return random.choice([
-            "Killed by a fragmentation grenade.",
-            "Killed by a military grade assault rifle.",
-            "Ripped to pieces by a large caliber machine gun."
+            "Killed by a fragmentation grenade",
+            "Killed by a military grade assault rifle",
+            "Ripped to pieces by a large caliber machine gun"
         ])
 
 

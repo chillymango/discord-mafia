@@ -239,7 +239,6 @@ class NewLobby:
         Remove a fake bot player
         """
         if not self.validate(interaction):
-            import pdb; pdb.set_trace()
             print(f"someone naughty: {interaction.user.name}")
             await interaction.send("Command only available to lobby host", ephemeral=True, delete_after=5.0)
             return

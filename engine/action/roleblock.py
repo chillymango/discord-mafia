@@ -1,5 +1,6 @@
 import typing as T
 from engine.action.base import Action
+from engine.affiliation import TOWN
 from engine.crimes import Crime
 
 if T.TYPE_CHECKING:
@@ -19,6 +20,16 @@ class Roleblock(Action):
             True: [Crime.SOLICITING],
             False: [Crime.SOLICITING],
         }
+
+    def update_crimes(self, actor: "Actor", success: bool) -> None:
+        """
+        If a Town member is roleblocked, apply Disturbing the Peace in addition
+        to Soliciting.
+        """
+        if not success:
+            return super().update_crimes(actor, success)
+        if actor._targets and actor._targets[0].role.affiliation() == TOWN:
+            actor.add_crimes([Crime.DISTURBING_THE_PEACE])
 
     def target_title(self, success: bool) -> str:
         return "You've Been Roleblocked"

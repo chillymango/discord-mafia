@@ -105,7 +105,8 @@ class AutomationContext:
             elif role.target_group == TargetGroup.LIVING_NON_TRIAD:
                 targets = [ac for ac in self.actors if ac.is_alive and ac.role.affiliation != TRIAD]
             elif role.target_group == TargetGroup.SELF:
-                targets = [self.actor]
+                # special group, either activate ability or no
+                targets = ["YES", "NO"]
             else:
                 targets = []
 
@@ -116,7 +117,7 @@ class AutomationContext:
                 targets.remove(self.actor)
             
             if as_str:
-                return [targ.player.name for targ in targets]
+                return [targ.player.name if isinstance(targ, state_pb2.Actor) else str(targ) for targ in targets]
 
             return targets
 

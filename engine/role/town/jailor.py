@@ -18,6 +18,8 @@ class Jailor(TownRole):
     Jail action during day should fix target at night.
     """
 
+    default_ability_uses = 3
+
     @classmethod
     def role_description(cls) -> str:
         """

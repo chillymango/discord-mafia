@@ -43,6 +43,7 @@ class BotMessageDriver(OutboundMessageDriver):
             MessageType.NIGHT_SEQUENCE,
             MessageType.INDICATOR,
             MessageType.PLAYER_PUBLIC_MESSAGE,
+            MessageType.BOT_PUBLIC_MESSAGE,  # LMAOOO
         )
 
     @property
@@ -54,15 +55,6 @@ class BotMessageDriver(OutboundMessageDriver):
         All this does is make the message *availble* for gRPC to pick up.
         """
         self._grpc_queue.put_nowait(message)
-
-
-class MessageTunnel(OutboundMessageDriver):
-    """
-    Bridges two threads or channels.
-
-    Aliases by default will use the name of the original sender.
-    This can overridden with a mapping and a default.
-    """
 
 
 class ChatDriver(OutboundMessageDriver):
