@@ -8,7 +8,6 @@ import typing as T
 from enum import Enum
 from collections import defaultdict
 
-from engine.component import Component
 from engine.message import Message
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
@@ -36,7 +35,7 @@ class TribunalState(Enum):
     LYNCH_VERDICT = 5  # Tribunal is announcing the player's role and last will
 
 
-class Tribunal(Component):
+class Tribunal:
     """
     General base class that can probably just be used straight up
 

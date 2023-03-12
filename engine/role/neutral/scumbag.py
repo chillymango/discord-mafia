@@ -5,6 +5,8 @@ from engine.action.base import ActionSequence
 from engine.action.kill import BodyguardKill
 from engine.role.base import RoleGroup
 from engine.role.neutral import NeutralRole
+from engine.wincon import EvilWin
+from engine.wincon import WinCondition
 
 
 class Scumbag(NeutralRole):
@@ -14,6 +16,10 @@ class Scumbag(NeutralRole):
 
     # this role cannot be dealt
     DISABLED = True
+
+    @classmethod
+    def win_condition(cls) -> T.Type[WinCondition]:
+        return EvilWin
 
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:

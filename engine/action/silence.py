@@ -1,7 +1,9 @@
 import typing as T
 
-from engine.actor import Actor
 from engine.action.base import Action
+
+if T.TYPE_CHECKING:
+    from engine.actor import Actor
 
 
 class Silence(Action):

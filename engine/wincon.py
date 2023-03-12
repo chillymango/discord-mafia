@@ -312,11 +312,9 @@ class AutoVictory(WinCondition):
         return True
 
 
-class JudgeWin(WinCondition):
+class EvilWin(WinCondition):
     """
-    Judge wins if Town has lost.
-
-    Judge can win with any evil.
+    Non-Killing Neutral Evil wins if Town has lost.
     """
 
     @classmethod

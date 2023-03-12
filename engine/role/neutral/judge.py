@@ -6,7 +6,7 @@ from engine.role.base import RoleGroup
 from engine.role.base import TargetGroup
 from engine.role.neutral import NeutralRole
 from engine.wincon import WinCondition
-from engine.wincon import JudgeWin
+from engine.wincon import EvilWin
 
 
 class Judge(NeutralRole):
@@ -15,7 +15,7 @@ class Judge(NeutralRole):
 
     @classmethod
     def win_condition(cls) -> T.Type[WinCondition]:
-        return JudgeWin
+        return EvilWin
 
     @classmethod
     def role_description(cls) -> str:

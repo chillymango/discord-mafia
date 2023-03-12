@@ -5,10 +5,16 @@ from engine.game import Game
 from engine.player import Player
 
 from engine.actor import Actor
+from engine.affiliation import TOWN
 from engine.role.base import RoleFactory
+from engine.role.neutral.jester import Jester
 from engine.setup import do_setup
+from engine.wincon import EvilWin
 from engine.wincon import WinCondition
+from engine.wincon import JesterWin
 from engine.wincon import MafiaWin
+from engine.wincon import SerialKillerWin
+from engine.wincon import SurvivorWin
 from engine.wincon import TownWin
 
 
@@ -43,20 +49,20 @@ class TestPostGame(unittest.TestCase):
             "Godfather",
             "Janitor",
             "Mafioso",
-            # 8 Town
+            # 6 Town
             "Mayor",
             "Doctor",
             "Bodyguard",
             "Investigator",
             "Lookout",
             "Detective",
-            "Escort",
-            "Veteran",
-            # 2 NK, 2 NB
+            # 2 NE, 2 NK, 2 NB
             "Survivor",
             "SerialKiller",
             "MassMurderer",
-            "Jester"
+            "Jester",
+            "Auditor",
+            "Judge",
         ]
         actors = [Actor(Player(name), rf.create_by_name(role_name), self._game) for name, role_name in zip(names, role_names)]
         self._game.add_actors(*actors)
@@ -90,10 +96,48 @@ class TestPostGame(unittest.TestCase):
         # kill all evils
         for actor in self._game.get_live_evil_actors():
             actor.kill()
-        import pdb; pdb.set_trace()
         wcs, winners = self._evaluate_win()
         self.assertEqual(len(winners), 9)  # make sure surv also wins
         self.assertIn(TownWin, wcs)
+        self.assertIn(SurvivorWin, wcs)
+
+    def test_sk_win(self) -> None:
+        for actor in self._game.get_live_actors():
+            actor.kill()
+        self.get_actor_with_role('Serial Killer')._is_alive = True
+
+        wcs, winners = self._evaluate_win()
+        self.assertEqual(len(winners), 1)
+        self.assertIn(SerialKillerWin, wcs)
+
+    def test_jester_win(self) -> None:
+        for actor in self._game.get_live_actors():
+            if isinstance(actor.role, Jester):
+                actor.lynch()
+
+        wcs, _ = self._evaluate_win()
+        self.assertIn(JesterWin, wcs)
+
+    def test_neutral_evil_win_with_mafia(self) -> None:
+        for actor in self._game.get_live_actors():
+            if actor.role.affiliation() == TOWN:
+                actor.kill()
+            if actor.role.name in ("Serial Killer", "Mass Murderer"):
+                actor.kill()
+
+        # test to make sure neut evils win
+        wcs, winners = self._evaluate_win()
+        judge_win = False
+        auditor_win = False
+        self.assertIn(EvilWin, wcs)
+        for winner in winners:
+            if winner.role.name == "Judge":
+                judge_win = True
+            elif winner.role.name == "Auditor":
+                auditor_win = True
+
+        self.assertTrue(judge_win, "The Judge has won")
+        self.assertTrue(auditor_win, "The Auditor has won")
 
 
 if __name__ == "__main__":

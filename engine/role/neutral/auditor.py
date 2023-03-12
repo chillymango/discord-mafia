@@ -4,7 +4,7 @@ from engine.action.audit import Audit
 from engine.action.base import ActionSequence
 from engine.role.neutral import NeutralRole
 from engine.wincon import WinCondition
-from engine.wincon import JesterWin
+from engine.wincon import EvilWin
 
 
 class Auditor(NeutralRole):
@@ -21,7 +21,7 @@ class Auditor(NeutralRole):
 
     @classmethod
     def win_condition(cls) -> T.Type[WinCondition]:
-        return JesterWin
+        return EvilWin
 
     @classmethod
     def day_action_description(cls) -> str:
