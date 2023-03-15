@@ -17,8 +17,6 @@ class Citizen(TownRole):
     # this role sucks
     DISABLED = True
 
-    default_vests = 1
-
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_GOVERNMENT]

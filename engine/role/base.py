@@ -1,7 +1,10 @@
 """
 Role Base Class
 """
+from collections import defaultdict
+from collections import deque
 from enum import Enum
+import logging
 import typing as T
 
 from engine.action.base import ActionSequence
@@ -13,7 +16,17 @@ from engine.affiliation import TOWN
 from engine.affiliation import TRIAD
 from engine.wincon import AutoVictory
 from engine.wincon import WinCondition
+import log
 from proto import state_pb2
+from util.string import camel_to_snake
+
+if T.TYPE_CHECKING:
+    from engine.config import GameConfig
+    from engine.game import Game
+
+logger = logging.getLogger(__name__)
+logger.addHandler(log.ch)
+logger.setLevel(logging.INFO)
 
 
 class Role:
@@ -125,7 +138,7 @@ class Role:
     def __repr__(self) -> str:
         return self.name
 
-    def __init__(self, config: T.Dict[str, T.Any]) -> None:
+    def __init__(self, config: "GameConfig") -> None:
         """
         We will look for a config section specifically for our role.
         A subsection of the large game config should be passed in here.
@@ -137,28 +150,50 @@ class Role:
         self._config = config
         self._init_with_config()
 
+    def init_with_game(self, game: "Game") -> None:
+        """
+        Given a game, initialize the role.
+
+        This is called for classes to setup after the game has started.
+        Example uses would be for classes like the Executioner, where they
+        will need to setup the class with some attributes.
+
+        By default this method will not do anything.
+        """
+
     def _init_with_config(self) -> None:
         """
         Write in some basic role stats from config.
 
-        Classes with more interesting behavior should generally call this super method additionally
+        Classes with more interesting behavior should generally call this super method additionally.
+
+        This will set default values per class. The `role_specific_config_init` method should be used
+        to follow up with config overrides.
         """
         # Ability Uses
         # typically we do ability counts per action sequence, so if there's
         # a multiple sequence interaction, doing both should consume one charge
-        self._ability_uses = self._config.get("ability_uses", self.default_ability_uses)  # using -1 means infinite uses
+        self._ability_uses = -1
 
-        self._allow_self_target = self._config.get("allow_self_target", False)
+        # Bulletproof Vests
+        self._vests = 0
 
         # Common Immunities
-        self._night_immune = self._config.get("night_immune", self.default_night_immune)
-        self._rb_immune = self._config.get("roleblock_immune", self.default_rb_immune)
-        self._intercept_rb = self._config.get("intercept_rb", self.default_intercept_rb)
-        self._target_immune = self._config.get("target_immune", self.default_target_immune)
-        self._detect_immune = self._config.get("detect_immune", self.default_detect_immune)
-        self._cannot_be_healed = self._config.get("cannot_be_healed", self.default_cannot_be_healed)
+        self._night_immune = False
+        self._rb_immune = False
+        self._intercept_rb = False
+        self._target_immune = False  # TODO: implement
+        self._detect_immune = False
+        self._cannot_be_healed = False
 
-        self._vests = self._config.get("vests", self.default_vests)
+        self._allow_self_target = False
+
+        self._role_specific_config_init()
+
+    def _role_specific_config_init(self) -> None:
+        """
+        Inheriting classes define this
+        """
 
     def to_proto(self) -> state_pb2.Role:
         role = state_pb2.Role(name=self.name)
@@ -197,7 +232,7 @@ class Role:
 
     @property
     def allow_self_target(self) -> bool:
-        return self._allow_self_target
+        return self._allow_self_target or self.target_group == TargetGroup.SELF
 
     @classmethod
     def affiliation(self) -> str:
@@ -269,18 +304,193 @@ class RoleGroup(Enum):
     NEUTRAL_BENIGN = "NeutralBenign"
     NEUTRAL_RANDOM = "NeutralRandom"
 
+    @classmethod
+    def create_from_name(cls, name: str) -> "RoleGroup":
+        """
+        Do some name formatting
+
+        Tries the following in order:
+            * build from value directly
+            * build from name directly
+            * infer from value
+        """
+        out = None
+        try:
+            out = cls(name)
+        except (KeyError, ValueError):
+            pass
+
+        if out is not None:
+            return out
+        
+        try:
+            out = cls[name]
+        except (KeyError, ValueError):
+            pass
+
+        if out is not None:
+            return out
+        
+        try:
+            munged = name.replace(' ', '')
+            out = cls(munged)
+        except (KeyError, ValueError):
+            pass
+        
+        if out is not None:
+            return out
+        
+        raise ValueError(f"Could not create RoleGroup enum from {name}")
+
+
+class RoleGroupNode:
+
+    def __init__(self, group: T.Union["RoleGroup", "Role"]) -> None:
+        self._group: T.Union["RoleGroup", "Role"] = group
+        self._children: T.List["RoleGroupNode"] = []
+
+    def __repr__(self) -> str:
+        return f"Node - {self._group.name}"
+
+    @property
+    def is_role(self) -> bool:
+        return isinstance(self._group, Role)
+
+    @property
+    def is_group(self) -> bool:
+        return isinstance(self._group, RoleGroup)
+
+    @property
+    def is_leaf(self) -> bool:
+        return not any([isinstance(child, RoleGroupNode) for child in self._children])
+
+    def add_child_node(self, node: "RoleGroupNode") -> None:
+        self._children.append(node)
+
+    def add_child_group(self, group: "RoleGroup") -> "RoleGroupNode":
+        """
+        Create a node for the group
+        """
+        node = RoleGroupNode(group)
+        self.add_child_node(node)
+        return node
+
+    def add_child_roles(self) -> None:
+        """
+        If we're storing a role group, add all roles as children.
+        If we're storing a role, don't do anything
+        """
+        if self.is_group:
+            self._children.extend(get_group_map().get(self._group, []))
+
+
+def get_group_map() -> T.Dict["RoleGroup", T.List["Role"]]:
+    global GROUP_MAP
+    if GROUP_MAP is not None:
+        return GROUP_MAP
+
+    from engine.role import ALL_ROLES
+    mapping = defaultdict(list)
+    for role in ALL_ROLES:
+        for group in role.groups():
+            if not role.DISABLED:
+                mapping[group].append(role)
+
+    # do not return a defaultdict
+    GROUP_MAP = {key: value for key, value in mapping.items()}
+    return GROUP_MAP
+
+
+GROUP_MAP = None
+
+
+def construct_role_tree() -> RoleGroupNode:
+    """
+    Create the standard role group tree and return the root node
+    """
+
+    root = RoleGroupNode(RoleGroup.ANY_RANDOM)
+    town = root.add_child_group(RoleGroup.TOWN_RANDOM)
+    mafia = root.add_child_group(RoleGroup.MAFIA_RANDOM)
+    neutral = root.add_child_group(RoleGroup.NEUTRAL_RANDOM)
+
+    # town subgroups
+    town.add_child_group(RoleGroup.TOWN_GOVERNMENT)
+    town.add_child_group(RoleGroup.TOWN_INVESTIGATIVE)
+    town.add_child_group(RoleGroup.TOWN_KILLING)
+    town.add_child_group(RoleGroup.TOWN_POWER)
+    town.add_child_group(RoleGroup.TOWN_PROTECTIVE)
+    town.add_child_group(RoleGroup.TOWN_SUPPORT)
+
+    # mafia subgroups
+    mafia.add_child_group(RoleGroup.MAFIA_DECEPTION)
+    mafia.add_child_group(RoleGroup.MAFIA_KILLING)
+    mafia.add_child_group(RoleGroup.MAFIA_SUPPORT)
+
+    # neutral subgroups
+    neutral.add_child_group(RoleGroup.NEUTRAL_BENIGN)
+    neutral.add_child_group(RoleGroup.NEUTRAL_EVIL)
+    neutral.add_child_group(RoleGroup.NEUTRAL_KILLING)
+
+    # traverse all nodes and if leaf node, populate with roles as children
+    to_visit: T.List[RoleGroupNode] = [root]
+    while to_visit:
+        node = to_visit.pop()
+        if not isinstance(node, RoleGroupNode):
+            raise ValueError(f"Invalid node {node}")
+
+        if node.is_leaf:
+            node.add_child_roles()
+        else:
+            to_visit.extend([child for child in node._children])
+
+    return root
+
+
+def role_group_tree(root: "RoleGroupNode" = None) -> T.List[T.Union["RoleGroup", "Role"]]:
+    """
+    Returns a list of nodes that traverses the role group tree in order. The order should
+    start from the bottom of the tree and work its way to the top of the tree.
+    """
+    root = root or construct_role_tree()
+    to_visit = deque([root])
+    output_order = deque()
+    while to_visit:
+        node = to_visit.popleft()
+        if node is None:
+            continue
+
+        to_visit.extend([child for child in node._children
+                         if isinstance(child, RoleGroupNode)
+                         and isinstance(child._group, RoleGroup)])
+
+        output_order.appendleft(node._group)
+    return output_order
+
+
+def construct_role_group_tree_map() -> T.Dict[RoleGroup, RoleGroupNode]:
+    """
+    Construct a role group tree and then return the node corresponding
+    to the specified role group
+    """
+    tree_map = dict()
+    to_visit = [construct_role_tree()]
+    while to_visit:
+        node = to_visit.pop()
+        tree_map[node._group] = node
+        for child in node._children:
+            if isinstance(child, RoleGroupNode):
+                to_visit.append(child)
+    return tree_map
+
 
 class RoleFactory:
 
-    def __init__(self, config: T.Dict[str, T.Any]) -> None:
+    def __init__(self, config:"GameConfig") -> None:
         self._config = config
 
-    def create_role(self, role: T.Type["Role"] = None) -> "Role":
-        role_name = role.__name__
-        role_config = self._config.get(role_name, {})
-        if role_config is None:
-            print(f"WARNING: no config found for role {role_name}")
-        return role(role_config)
+    def create_role(self, role: T.Type["Role"]) -> "Role":
+        return role(self._config)
 
     def create_by_name(self, role_name: str) -> T.Optional["Role"]:
         # TODO: shitty pattern, fix circ import

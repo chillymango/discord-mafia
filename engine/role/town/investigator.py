@@ -47,3 +47,6 @@ class Investigator(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_INVESTIGATIVE]
+
+    def _role_specific_config_init(self) -> None:
+        self._detect_exact_role = self._config.role_config.investigator.detects_exact_role

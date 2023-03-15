@@ -164,3 +164,5 @@ class TargetGroup(Enum):
     SELF = 4
     JAIL = 5
     VIGILANTE = 6
+    BEGUILER = 7
+    KIDNAPPER = 8

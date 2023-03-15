@@ -40,3 +40,6 @@ class Armorsmith(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_PROTECTIVE, RoleGroup.TOWN_SUPPORT]
+
+    def _role_specific_config_init(self) -> None:
+        self._ability_uses = self._config.role_config.armorsmith.number_of_vests

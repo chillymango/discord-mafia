@@ -22,6 +22,7 @@ def import_submodules(package, recursive=True):
             results.update(import_submodules(full_name))
     return results
 
+
 def test():
     from engine.role import mafia
     from engine.role import town

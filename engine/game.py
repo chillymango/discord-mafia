@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import random
 import typing as T
 from collections import defaultdict
@@ -8,6 +9,7 @@ from engine.actor import Actor
 from engine.affiliation import MAFIA
 from engine.affiliation import TOWN
 from engine.affiliation import TRIAD
+from engine.config import GameConfig
 from engine.report import DeathReporter
 from engine.message import Messenger
 from engine.phase import GamePhase
@@ -17,6 +19,8 @@ from engine.role.base import RoleFactory
 from engine.role.base import RoleGroup
 from engine.role.neutral.massmurderer import MassMurderer
 from engine.role.neutral.serialkiller import SerialKiller
+import log
+
 from proto import state_pb2
 
 if T.TYPE_CHECKING:
@@ -32,18 +36,26 @@ class Tombstone:
     turn_number: int
     epitaph: str
 
+    def to_proto(self) -> state_pb2.Tombstone:
+        return state_pb2.Tombstone(
+            player=self.actor.player.to_proto(),
+            epitaph=self.epitaph,
+            turn_phase=self.turn_phase.name,
+            turn_number=self.turn_number,
+        )
+
 
 class Game:
 
-    def __init__(self, config: T.Dict[str, T.Any] = None):
-        self._config = config or dict()
+    def __init__(self, config: GameConfig):
+        self._config = config
         self._actors: T.List["Actor"] = []  # MUST BE ORDERED STRICTLY
         self._players: T.List["Player"] = []  # MUST BE ORDERED STRICTLY
         self._game_phase = GamePhase.INITIALIZING
         self._turn_number = 1
         self._turn_phase = TurnPhase.INITIALIZING
         self._tribunal: "Tribunal" = None
-        self._role_factory = RoleFactory(config=config.get('role', {}))
+        self._role_factory = RoleFactory(config=self._config)
 
         self._messenger: T.Optional[Messenger] = None
         self._graveyard: T.List[Tombstone] = list()
@@ -60,6 +72,10 @@ class Game:
         # mapping of jailor to prisoner
         self._jail_map: T.Dict["Actor", "Actor"] = dict()
 
+        # when this attaches to a session, the channel ID of the game or
+        # the channel name of the game should be used for this instead
+        self.log = logging.Logger(f"Game-{id(self)}")
+
     def to_proto(self) -> state_pb2.Game:
         game = state_pb2.Game(
             game_phase=self.game_phase.name,
@@ -68,6 +84,7 @@ class Game:
             tribunal=self.tribunal.to_proto()
         )
         game.actors.extend([a.to_proto() for a in self.get_actors()])
+        game.graveyard.extend([ts.to_proto() for ts in self._graveyard])
         # TODO: graveyard
         return game
 
@@ -142,7 +159,7 @@ class Game:
             return
 
         from engine.role.base import RoleFactory
-        rf = RoleFactory(self._config.get("roles", {}))
+        rf = RoleFactory(self._config)
         role = rf.create_by_name(role_name)
         print(f"Making {player_name} a {role_name}")
         actor._role = role
@@ -273,7 +290,7 @@ class Game:
 
     @property
     def actors(self) -> T.List["Actor"]:
-        return [a for a in self._actors]
+        return self._actors[:]
 
     @property
     def human_actors(self) -> T.List["Actor"]:

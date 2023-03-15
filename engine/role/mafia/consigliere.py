@@ -38,3 +38,6 @@ class Consigliere(MafiaRole):
     @classmethod
     def night_actions(cls):
         return [InvestigateExact]
+
+    def _role_specific_config_init(self) -> None:
+        self._detects_exact_role = self._config.role_config.consigliere.detects_exact_role

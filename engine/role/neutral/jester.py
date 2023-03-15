@@ -41,3 +41,6 @@ class Jester(NeutralRole):
     @classmethod
     def night_actions(cls) -> ActionSequence:
         return [Annoy]
+
+    def _role_specific_config_init(self) -> None:
+        self._random_guilty_voter_dies = self._config.role_config.jester.random_guilty_voter_dies

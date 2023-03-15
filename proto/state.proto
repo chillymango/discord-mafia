@@ -51,6 +51,8 @@ message Game {
 message Tombstone {
     Player player = 1;
     string epitaph = 2;
+    string turn_phase = 3;
+    int32 turn_number = 4;
 }
 
 message VoteCount {
@@ -74,6 +76,20 @@ message Tribunal {
 
     // if someone is on trial, put them here
     Actor on_trial = 5;
+
+    // track judge if applicable
+    Actor judge = 6;
+
+    // track mayor if applicable
+    Actor mayor = 7;
+
+    // enumerated type for trial, process as name
+    string trial_type = 8;
+
+    // number of votes each player gets.
+    // leave this empty defaults to 1
+    repeated VoteCount vote_counts = 9;
+
 }
 
 message GetGameRequest {

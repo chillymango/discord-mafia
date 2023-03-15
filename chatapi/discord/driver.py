@@ -18,7 +18,6 @@ from proto import message_pb2
 
 if T.TYPE_CHECKING:
     from chatapi.app.bot import BotUser
-    from chatapi.discord.input_panel import InputController
     from engine.actor import Actor
     from engine.message import Message
     from engine.player import Player

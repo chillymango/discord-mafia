@@ -11,11 +11,8 @@ from chatapi.discord.driver import BotMessageDriver
 from chatapi.discord.driver import DiscordDriver
 from chatapi.discord.driver import WebhookDriver
 from chatapi.discord.forward import ForwardChatMessages
-from chatapi.discord.input_panel import InputPanel
-from chatapi.discord.input_panel import InputController
 from chatapi.discord.panel import LobbyPanel
 from chatapi.discord.router import router
-from chatapi.discord.view import ViewController
 from engine.message import Messenger
 from engine.game import Game
 from engine.phase import TurnPhase

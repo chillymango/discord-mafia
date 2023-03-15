@@ -59,3 +59,7 @@ class Marshall(TownRole):
         Most actions will target live players.
         """
         return TargetGroup.SELF
+
+    def _role_specific_config_init(self) -> None:
+        self._group_executions_allowed = self._config.role_config.marshall.group_executions_allowed
+        self._executions_per_group = self._config.role_config.marshall.executions_per_group

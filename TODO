@@ -69,8 +69,6 @@ Here's a list of shit I should do
 * [p2] Chat controller type for TownHall, Court, Hideouts, etc.
     * TownHall shouldn't control all of them probably
 * [p2] Cleanup dead files (e.g input_panel.py)
-* [p2] protos everywhere
-    * all data objects going forward should inherit from the appropriate proto model
 
 ## Balance / Game Design
 ### Meta Analysis

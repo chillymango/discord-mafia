@@ -54,3 +54,8 @@ class Judge(NeutralRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.NEUTRAL_EVIL]
+
+    def _role_specific_config_init(self) -> None:
+        self._ability_uses = self._config.role_config.judge.court_calls_allowed
+        self._vote_count = self._config.role_config.judge.vote_count
+        self._can_speak_at_night = self._config.role_config.judge.can_speak_at_night_as_crier

@@ -66,3 +66,6 @@ class Jailor(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_POWER, RoleGroup.TOWN_KILLING]
+
+    def _role_specific_config_init(self) -> None:
+        self._ability_uses = self._config.role_config.jailor.number_of_executions_available

@@ -34,10 +34,6 @@ class Godfather(MafiaRole):
         """
         return "Kill one player each night."
 
-    default_night_immune = True
-    default_rb_immune = True
-    default_detect_immune = True
-
     @classmethod
     def unique(cls) -> bool:
         return True
@@ -49,3 +45,9 @@ class Godfather(MafiaRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.MAFIA_KILLING]
+
+    def _role_specific_config_init(self) -> None:
+        self._night_immune = self._config.role_config.godfather.invulnerable_at_night
+        self._detect_immune = self._config.role_config.godfather.immune_to_detection
+        self._rb_immune = self._config.role_config.godfather.cannot_be_role_blocked
+        self._can_kill_without_mafioso = self._config.role_config.godfather.can_kill_without_mafioso

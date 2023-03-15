@@ -3,8 +3,10 @@ Interface to game player (from actor).
 
 This should be 1:1 player:actor but we will keep them separate for now.
 """
+import logging
 import typing as T
 
+import log
 from proto import state_pb2
 
 if T.TYPE_CHECKING:

@@ -10,8 +10,6 @@ from engine.wincon import MassMurdererWin
 
 class MassMurderer(NeutralRole):
 
-    default_night_immune = True
-
     @classmethod
     def win_condition(cls) -> T.Type[WinCondition]:
         return MassMurdererWin
@@ -48,3 +46,9 @@ class MassMurderer(NeutralRole):
     @classmethod
     def groups(cls) -> T.Iterable["RoleGroup"]:
         return super().groups() + [RoleGroup.NEUTRAL_KILLING, RoleGroup.NEUTRAL_EVIL]
+
+    def _role_specific_config_init(self) -> None:
+        self._night_immune = self._config.role_config.mass_murderer.invulnerable_at_night
+        self._detect_immune = self._config.role_config.mass_murderer.immune_to_detection
+        self._nights_between_sprees = self._config.role_config.mass_murderer.nights_between_sprees
+        self._allow_self_target = self._config.role_config.mass_murderer.can_self_target

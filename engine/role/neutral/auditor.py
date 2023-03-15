@@ -45,3 +45,6 @@ class Auditor(NeutralRole):
     @classmethod
     def night_actions(cls) -> ActionSequence:
         return [Audit]
+
+    def _role_specific_config_init(self) -> None:
+        self._ability_uses = self._config.role_config.auditor.number_of_audits

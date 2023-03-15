@@ -12,6 +12,7 @@ from collections import defaultdict
 
 from engine.action.kill import Kill
 from engine.action.transform import ConsiglierePromote
+from engine.action.transform import ExecutionerLoss
 from engine.action.transform import MafiosoDemote
 from engine.message import Message
 from engine.phase import GamePhase
@@ -20,6 +21,7 @@ from engine.resolver import SequenceEvent
 from engine.role.mafia.consigliere import Consigliere
 from engine.role.mafia.godfather import Godfather
 from engine.role.mafia.mafioso import Mafioso
+from engine.role.neutral.executioner import Executioner
 
 if T.TYPE_CHECKING:
     from engine.actor import Actor
@@ -73,10 +75,10 @@ class Stepper:
     We rely on config primarily for timings.
     """
 
-    def __init__(self, game: "Game", config: T.Dict[str, T.Any], sleeper: Sleeper = asyncio.sleep) -> None:
+    def __init__(self, game: "Game", sleeper: Sleeper = asyncio.sleep) -> None:
         self._sleep = sleeper
         self._game = game
-        self._config = config
+        self._config = game._config
         self._init_with_config()
         self._live_player_count = len(self._game.get_live_actors())
         self._reported_dead: T.Set["Actor"] = set()
@@ -86,18 +88,17 @@ class Stepper:
         return self._game.messenger
 
     def _init_with_config(self) -> None:
-        self._daybreak_to_daylight = self._config.get("daybreak_to_daylight_override", 5.0)
-        self._day_duration = self._config.get("day_duration", 60.0)
-        self._dusk_to_night = self._config.get("dusk_to_night_override", 5.0)
-        self._night_duration = self._config.get("night_duration", 30.0)
-        self._night_sequence_duration = self._config.get("night_sequence_override", 1.0)
+        self._daybreak_to_daylight = 5.0
+        self._day_duration = self._config.timing.day_duration
+        self._dusk_to_night = 10.0
+        self._night_duration = self._config.timing.night_duration
+        self._night_sequence_duration = 5.0
 
     async def _flush_then_wait_for_min_time(self, delay: float, min_time: float) -> None:
         """
         Flush all messages and then wait for some minimum duration
         """
         t_init = time.time()
-        #self._game.flush_all_messages()
         t_final = time.time()
         t_remaining = min_time - (t_final - t_init)
         await self._sleep(max(t_remaining, 0))
@@ -287,7 +288,13 @@ class Stepper:
             else:
                 print("No valid promotions?")
 
-        await asyncio.sleep(3.0)
+        # convert Executioner if necessary
+        for executioner in self._game.get_live_actors_by_role(Executioner):
+            exec_target: "Actor" = executioner.role.executioner_target
+            if not exec_target.is_alive and not exec_target.lynched:
+                SequenceEvent(ExecutionerLoss(), executioner).execute()
+
+        await self._sleep(3.0)
 
         # phase advancing should be done last
         self._game.turn_phase = TurnPhase.NIGHT

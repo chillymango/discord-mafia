@@ -90,26 +90,38 @@ class Role(_message.Message):
     def __init__(self, name: _Optional[str] = ..., affiliation: _Optional[str] = ..., role_description: _Optional[str] = ..., action_description: _Optional[str] = ..., ability_uses: _Optional[int] = ...) -> None: ...
 
 class Tombstone(_message.Message):
-    __slots__ = ["epitaph", "player"]
+    __slots__ = ["epitaph", "player", "turn_number", "turn_phase"]
     EPITAPH_FIELD_NUMBER: _ClassVar[int]
     PLAYER_FIELD_NUMBER: _ClassVar[int]
+    TURN_NUMBER_FIELD_NUMBER: _ClassVar[int]
+    TURN_PHASE_FIELD_NUMBER: _ClassVar[int]
     epitaph: str
     player: Player
-    def __init__(self, player: _Optional[_Union[Player, _Mapping]] = ..., epitaph: _Optional[str] = ...) -> None: ...
+    turn_number: int
+    turn_phase: str
+    def __init__(self, player: _Optional[_Union[Player, _Mapping]] = ..., epitaph: _Optional[str] = ..., turn_phase: _Optional[str] = ..., turn_number: _Optional[int] = ...) -> None: ...
 
 class Tribunal(_message.Message):
-    __slots__ = ["lynch_votes", "on_trial", "skip_votes", "state", "trial_votes"]
+    __slots__ = ["judge", "lynch_votes", "mayor", "on_trial", "skip_votes", "state", "trial_type", "trial_votes", "vote_counts"]
+    JUDGE_FIELD_NUMBER: _ClassVar[int]
     LYNCH_VOTES_FIELD_NUMBER: _ClassVar[int]
+    MAYOR_FIELD_NUMBER: _ClassVar[int]
     ON_TRIAL_FIELD_NUMBER: _ClassVar[int]
     SKIP_VOTES_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
+    TRIAL_TYPE_FIELD_NUMBER: _ClassVar[int]
     TRIAL_VOTES_FIELD_NUMBER: _ClassVar[int]
+    VOTE_COUNTS_FIELD_NUMBER: _ClassVar[int]
+    judge: Actor
     lynch_votes: _containers.RepeatedCompositeFieldContainer[VoteCount]
+    mayor: Actor
     on_trial: Actor
     skip_votes: int
     state: str
+    trial_type: str
     trial_votes: _containers.RepeatedCompositeFieldContainer[VoteCount]
-    def __init__(self, state: _Optional[str] = ..., trial_votes: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ..., lynch_votes: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ..., skip_votes: _Optional[int] = ..., on_trial: _Optional[_Union[Actor, _Mapping]] = ...) -> None: ...
+    vote_counts: _containers.RepeatedCompositeFieldContainer[VoteCount]
+    def __init__(self, state: _Optional[str] = ..., trial_votes: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ..., lynch_votes: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ..., skip_votes: _Optional[int] = ..., on_trial: _Optional[_Union[Actor, _Mapping]] = ..., judge: _Optional[_Union[Actor, _Mapping]] = ..., mayor: _Optional[_Union[Actor, _Mapping]] = ..., trial_type: _Optional[str] = ..., vote_counts: _Optional[_Iterable[_Union[VoteCount, _Mapping]]] = ...) -> None: ...
 
 class VoteCount(_message.Message):
     __slots__ = ["count", "player"]

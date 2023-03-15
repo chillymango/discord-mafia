@@ -9,3 +9,8 @@ uvicorn
 pydantic
 grpcio-tools
 openai
+
+aiogoogle
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

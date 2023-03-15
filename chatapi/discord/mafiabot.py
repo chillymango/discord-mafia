@@ -42,7 +42,6 @@ if T.TYPE_CHECKING:
 
 
 # testing
-from chatapi.discord.input_panel import InputPanel
 from engine.setup import do_setup
 
 TOKEN = os.environ.get('DISCORD_BOT_TOKEN')

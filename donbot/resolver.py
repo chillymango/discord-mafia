@@ -47,17 +47,3 @@ class RandomResolver(Resolver):
 
     def resolve(self, options: T.List[T.Any], count: int = 1) -> T.List[T.Any]:
         return random.sample(options, count)
-
-
-# ok so the rest of these are probalby going to look like
-class AIResolver(Resolver):
-    
-    @classmethod
-    def create_from_chatgpt(cls, openai: T.Any) -> "AIResolver":
-        return cls()
-
-
-class AITargetResolver(AIResolver):
-    """
-    Consults ChatGPT to figure out which target to select
-    """

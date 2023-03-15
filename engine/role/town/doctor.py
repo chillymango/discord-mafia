@@ -39,3 +39,6 @@ class Doctor(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_PROTECTIVE]
+
+    def _role_specific_config_init(self) -> None:
+        self._knows_if_target_is_attacked = self._config.role_config.doctor.know_if_target_is_attacked

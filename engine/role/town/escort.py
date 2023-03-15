@@ -38,3 +38,7 @@ class Escort(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_SUPPORT]
+
+    def _role_specific_config_init(self) -> None:
+        self._rb_immune = self._config.role_config.escort.cannot_be_role_blocked
+        self._detect_block_immune = self._config.role_config.escort.detects_role_block_immune_target

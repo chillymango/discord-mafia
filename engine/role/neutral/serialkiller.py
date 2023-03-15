@@ -50,3 +50,9 @@ class SerialKiller(NeutralRole):
     @classmethod
     def groups(cls) -> T.Iterable["RoleGroup"]:
         return super().groups() + [RoleGroup.NEUTRAL_KILLING, RoleGroup.NEUTRAL_EVIL]
+
+    def _role_specific_config_init(self) -> None:
+        self._night_immune = self._config.role_config.serial_killer.invulnerable_at_night
+        self._rb_immune = self._config.role_config.serial_killer.kills_role_blockers
+        self._intercept_rb = self._config.role_config.serial_killer.kills_role_blockers
+        self._detect_immune = self._config.role_config.serial_killer.immune_to_detection

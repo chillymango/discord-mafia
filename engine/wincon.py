@@ -1,10 +1,16 @@
+import logging
 import typing as T
 
 from engine.action.lynch import Lynch
+import log
 
 if T.TYPE_CHECKING:
     from engine.actor import Actor
     from engine.game import Game
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(log.ch)
 
 
 class WinCondition:
@@ -161,6 +167,58 @@ class JesterWin(WinCondition):
         return False
 
 
+class ExecutionerWin(WinCondition):
+    """
+    Executioner wins if their target was lynched
+    """
+
+    @classmethod
+    def title(cls) -> str:
+        return "The Executioner Has Won"
+
+    @classmethod
+    def description(cls) -> str:
+        return "You do not care if the Town wins or the Mafia wins. You win if your target is " + \
+            "lynched while you are alive. You lose if your target dies without being lynched, or " + \
+            "you die while your target remains unlynched."
+
+    @classmethod
+    def evaluate(cls, actor: "Actor", game: "Game") -> bool:
+        """
+        Evaluate in the following order
+        * if the executioner target does not exist, default to True
+            * we don't blame players for shitty coding from the dev
+        * if the executioner target is still alive, return False
+        * if the execution target was lynched and the executioner did not
+            die before the target, return True
+        * otherwise return False
+        """
+        target: "Actor" = getattr(actor.role, "executioner_target", None)
+        if target is None:
+            logger.warning(f"Executioner {actor.name} in game {game} does not have a target at all")
+            # default to giving them the win if there's a bug
+            return True
+
+        if not target.lynched:
+            return False
+
+        # this implies that the target was lynched, so they should be in the graveyard
+        # look up when people died. graveyard should already be sorted in order of death time
+        if target.lynched and not actor.is_alive:
+            for tombstone in reversed(game._graveyard):
+                if tombstone.actor == actor:
+                    return True
+                if tombstone.actor == target:
+                    return False
+
+            logger.warning(f"Executioner {actor.name} in game {game} failed to evaluate target "
+                        f"from graveyard. Target: {target.name}.\nGraveyard:\n{game._graveyard}")
+            # default to giving them the win if there's a bug
+            return True
+
+        return True
+
+
 class SurvivorWin(WinCondition):
     """
     Survivor wins if still alive at end of game
@@ -183,24 +241,6 @@ class SurvivorWin(WinCondition):
         if actor.is_alive:
             return True
         return False
-
-
-class ExecutionerWin(WinCondition):
-    """
-    Executioner wins if their target was lynched
-    """
-
-    @classmethod
-    def title(cls) -> str:
-        """
-        Panel title at game presentation
-        """
-        return "The Executioner Has Won"
-
-    @classmethod
-    def description(cls) -> str:
-        return "You win if your target is lynched by the town. If your target is killed by " + \
-            "other means, you will become a Jester."
 
 
 class SerialKillerWin(WinCondition):

@@ -5,6 +5,7 @@ from engine.role.base import Role
 from engine.role.mafia.consigliere import Consigliere
 from engine.role.mafia.godfather import Godfather
 from engine.role.mafia.mafioso import Mafioso
+from engine.role.neutral.jester import Jester
 
 if T.TYPE_CHECKING:
     from engine.actor import Actor
@@ -55,3 +56,16 @@ class MafiosoDemote(Transform):
     @classmethod
     def new_role(cls) -> T.Type[Role]:
         return Mafioso
+
+
+class ExecutionerLoss(Transform):
+    """
+    Transform an Executioner into a Jester
+    """
+
+    def target_text_success(self) -> str:
+        return f"The death of your target has driven you insane. You are now a Jester."
+
+    @classmethod
+    def new_role(cls) -> T.Type[Role]:
+        return Jester

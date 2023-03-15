@@ -10,6 +10,7 @@ Examples:
 """
 from collections import defaultdict
 import asyncio
+import logging
 import time
 import typing as T
 import disnake
@@ -39,6 +40,10 @@ class Hideout:
     """
 
     NAME = "Hideout"
+
+    @property
+    def log(self) -> logging.Logger:
+        return self._game.log
 
     def is_open(self) -> bool:
         """
@@ -100,16 +105,16 @@ class Hideout:
         try:
             while not self._stop.is_set():
                 if self.is_open() and not self._active:
-                    print(f"Opening {self.__class__.__name__}")
+                    self.log.info(f"Opening {self.__class__.__name__}")
                     self._active = True
                     await self.open()
                 elif not self.is_open() and self._active:
-                    print(f"Closing {self.__class__.__name__}")
+                    self.log.info(f"Closing {self.__class__.__name__}")
                     self._active = False
                     await self.close()
                 await asyncio.sleep(1.0)
         except Exception as exc:
-            print(repr(exc))
+            self.log.exception(exc)
 
 
 # lets just make one concrete version first
@@ -228,7 +233,6 @@ class MessageTunnel:
             if egress[0] == sink:
                 self._routing_rules[source].remove(egress)
                 router.unregister_message_callback(source.name, self.filter_message)
-
         print("WARNING: remove_route tried to remove a route that did not exist")
 
     async def filter_message(self, message: "disnake.Message") -> None:
@@ -311,6 +315,11 @@ class Jail(Hideout):
         self._jailhouses: T.Dict["Actor", disnake.Thread] = dict()
         self._jailcells: T.Dict["Actor", disnake.Thread] = dict()
 
+        self._threads: T.List[disnake.Thread] = list()
+        jailor_count = len(self._game.get_live_actors_by_role(Jailor))
+        futures = [asyncio.ensure_future(self.create_thread()) for _ in range(2 * jailor_count)]
+        await asyncio.gather(*futures)
+
         futures: T.List[asyncio.Future] = list()
         for jailor, prisoner in self._game._jail_map.items():
             if jailor.player.is_bot:
@@ -331,11 +340,12 @@ class Jail(Hideout):
                     futures.append(
                         asyncio.ensure_future(self._jailcells[prisoner].add_user(prisoner.player.user))
                     )
-        print("Setting up jail threads")
+
+        self.log.info("Setting up jail threads")
         # wait for all operations first
         await asyncio.gather(*futures)
 
-        print("setting up tunnel")
+        self.log.info("setting up tunnel")
         await self.setup_tunnel()
 
     async def close(self) -> None:
@@ -399,17 +409,9 @@ class Jail(Hideout):
 
     async def clean_thread_history(self, thread: disnake.Thread) -> None:
         t_init = time.time()
-        to_delete: T.List[disnake.Message] = []
-        async for message in thread.history(limit=200):
-            to_delete.append(message)
-
-        try:
-            await asyncio.gather(*[msg.delete() for msg in to_delete])
-        except:
-            pass
-
+        await thread.delete()
         t_final = time.time()
-        print(f"Took {t_final - t_init}s to clean thread {thread.name}")
+        self.log.info(f"Took {t_final - t_init}s to clean thread {thread.name}")
 
     async def cleanup_tunnel(self) -> None:
         futures = []
@@ -507,4 +509,4 @@ class DeathChat(Hideout):
                     await self.close()
                 await asyncio.sleep(1.0)
         except Exception as exc:
-            print(repr(exc))
+            self.log.exception(exc)

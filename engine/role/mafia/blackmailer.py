@@ -33,10 +33,6 @@ class Blackmailer(MafiaRole):
         """
         return "Silence your target, preventing them from speaking during the next day and night."
 
-    def _init_with_config(self) -> None:
-        super()._init_with_config()
-        self._victim_can_speak_during_trial = self._config.get("can_speak_during_trial", False)
-
     @classmethod
     def night_actions(cls):
         return [Silence]
@@ -44,3 +40,6 @@ class Blackmailer(MafiaRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.MAFIA_SUPPORT]
+
+    def _role_specific_config_init(self) -> None:
+        self._victim_can_speak_during_trial = self._config.role_config.blackmailer.blackmailed_person_can_talk_during_trial

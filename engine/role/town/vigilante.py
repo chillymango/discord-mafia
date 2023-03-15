@@ -58,3 +58,6 @@ class Vigilante(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_KILLING]
+
+    def _role_specific_config_init(self) -> None:
+        self._ability_uses = self._config.role_config.vigilante.number_of_shots

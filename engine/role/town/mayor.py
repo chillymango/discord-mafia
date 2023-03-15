@@ -60,3 +60,6 @@ class Mayor(TownRole):
         """
         return TargetGroup.SELF
 
+    def _role_specific_config_init(self) -> None:
+        self._cannot_be_healed = self._config.role_config.mayor.cannot_be_healed
+        self._vote_count = self._config.role_config.mayor.vote_count

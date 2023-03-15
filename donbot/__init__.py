@@ -288,7 +288,7 @@ class DonBot:
         while True:
             try:
                 msg = await self._message_queue.get()
-                self.log.info(msg)
+                #self.log.info(msg)
                 # feed resolver with this information
                 # if it's an action feedback, update last will
                 await self._maybe_record_feedback(msg)
@@ -462,21 +462,27 @@ class DonBot:
             actions = self.contextualize()
             if (self._game.turn_phase, self._game.turn_number) not in self._action_decisions:
                 if BotAction.DAY_ACTION in actions:
+                    self.log.info("Have day action")
                     # think about selecting a target
                     targets = actions[BotAction.DAY_ACTION]
                     if targets:
                         # when playing randomly, day targets will often trigger
                         # e.g MAYOR ON DAY 1 BABY
                         selected = self._resolvers[BotAction.DAY_ACTION](targets)
+                        self.log.info(f"Selected {selected} for {self.role.name} day action")
                     else:
+                        self.log.info("Skipping day action select")
                         selected = None
                 elif BotAction.NIGHT_ACTION in actions:
                     targets = actions[BotAction.NIGHT_ACTION]
                     if targets:
-                        # when playing randomly, day targets will often trigger
-                        # e.g MAYOR ON DAY 1 BABY
                         selected = self._resolvers[BotAction.NIGHT_ACTION](targets)
+                        self.log.info(f"Selected {selected} for {self.role.name} night action")
+                    else:
+                        selected = None
+                        self.log.info("Skipping night action select")
                 else:
+                    self.log.info("No action. Skipping target.")
                     selected = None
 
                 # always latch, even for AI - do not permit retargeting
@@ -484,6 +490,11 @@ class DonBot:
                 if selected:
                     if selected == 'YES':
                         await self.target(self._actor.player.name)
+                        self.record_event(f"Targeted self")
+                    elif selected == 'NO':
+                        self.record_event("No target")
+                    else:
+                        await self.target(*selected)
                         self.record_event(f"Targeted {', '.join(selected)}")
 
             if (self._game.turn_phase, self._game.turn_number) not in self._trial_decisions:

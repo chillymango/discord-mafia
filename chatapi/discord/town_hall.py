@@ -9,6 +9,7 @@ This should include:
 import asyncio
 from enum import Enum
 import disnake
+import logging
 import typing as T
 
 from chatapi.discord.channel import channel_manager
@@ -79,6 +80,10 @@ class TownHall:
         self._court: Court = None
         self._hideouts: T.List[Hideout] = []
 
+    @property
+    def log(self) -> logging.Logger:
+        return self._game.log
+
     def initialize(self) -> None:
         # initialize everything up front
         # when appropriate we bump the message by re-sending it
@@ -145,7 +150,7 @@ class TownHall:
             self.update_live_player_permissions(),
         )
 
-        print("Preparing Hideouts")
+        self.log.info("Preparing hideouts")
         self._hideouts.extend([
             await MafiaHideout.create_and_init(self._game, self.ch_bulletin),
             await Jail.create_and_init(self._game, self.ch_bulletin),
@@ -153,7 +158,7 @@ class TownHall:
         ])
         for hideout in self._hideouts:
             hideout.start()
-        print("Done preparing hideouts")
+        self.log.info("Done preparing hideouts")
 
     def silence(self, actor: "Actor", do_silence: bool = True) -> None:
         if actor.player.is_bot:

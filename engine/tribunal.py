@@ -14,7 +14,6 @@ from engine.phase import TurnPhase
 from proto import state_pb2
 
 if T.TYPE_CHECKING:
-    from chatapi.discord.view import ViewController
     from engine.actor import Actor
     from engine.game import Game
     from engine.message import Messenger
@@ -42,9 +41,9 @@ class Tribunal:
     Inheriting classes can make overrides based on game rules.
     """
 
-    def __init__(self, game: "Game", tribunal_config: T.Dict[str, T.Any], sleeper = asyncio.sleep) -> None:
+    def __init__(self, game: "Game", sleeper = asyncio.sleep) -> None:
         self._game = game
-        self._config = tribunal_config
+        self._config = game._config
         self._state = TribunalState.CLOSED
         self._sleep = sleeper
 
@@ -69,20 +68,14 @@ class Tribunal:
         self._trial_type = TrialType.STANDARD
         self._lynches_left: int = 1  # Marshall can modify this for a turn
 
-        # call this to edit the last output
-        self._view_controller: "ViewController" = None
-
         # TODO: populate some trial timings and what not
         # :GAMETIMING:
-        self._day_duration = self._config.get("day_duration", 90.0)
-        self._defense_period = self._config.get("defense_period", 15.0)
-        self._lynch_vote_period = self._config.get("lynch_vote_period", 15.0)
+        self._day_duration = self._config.timing.day_duration
+        self._defense_period = self._config.timing.trial_defense_duration
+        self._lynch_vote_period = self._config.timing.lynch_vote_duration
+        self._skip_first_day = self._config.timing.skip_first_day
 
-        # lynching on day 1 is troll
-        self._skip_first_day = self._config.get("skip_first_day", True)
-
-        # marshall config
-        self._marshall_lynches = self._config.get("marshall_lynches", 3)
+        self._marshall_lynches = self._config.role_config.marshall.executions_per_group
 
         # keep track of who the judge and mayor are
         self._judge: T.Optional["Actor"] = None
@@ -116,14 +109,6 @@ class Tribunal:
     @property
     def state(self) -> TribunalState:
         return self._state
-
-    @property
-    def view_controller(self) -> "ViewController":
-        return self._view_controller
-    
-    @view_controller.setter
-    def view_controller(self, vc: "ViewController") -> None:
-        self._view_controller = vc
 
     @property
     def messenger(self) -> "Messenger":

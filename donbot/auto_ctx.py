@@ -13,6 +13,7 @@ from engine.role.base import TargetGroup
 from engine.phase import TurnPhase
 from engine.role import NAME_TO_ROLE
 from engine.role.base import Role
+from engine.setup import DEFAULT_CONFIG
 from engine.tribunal import TribunalState
 from proto import state_pb2
 
@@ -95,7 +96,7 @@ class AutomationContext:
     def get_targets(self, as_str: bool = True) -> T.List[str]:
         # these are all protos lol
         if self.actor.is_alive:
-            role = self.role({})
+            role = self.role(DEFAULT_CONFIG)
             if role.target_group == TargetGroup.LIVE_PLAYERS:
                 targets = [ac for ac in self.actors if ac.is_alive]
             elif role.target_group == TargetGroup.DEAD_PLAYERS:

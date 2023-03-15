@@ -36,10 +36,6 @@ class Framer(MafiaRole):
         return "Frame one player each night, giving them a random " + \
                "crime, and make them appear evil to investigators."
 
-    def _init_with_config(self) -> None:
-        super()._init_with_config()
-        self._can_hide_behind_team = self._config.get("can_hide_behind_team", True)
-
     @classmethod
     def night_actions(cls):
         return [Frame]
@@ -47,3 +43,6 @@ class Framer(MafiaRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.MAFIA_DECEPTION]
+
+    def _role_specific_config_init(self) -> None:
+        self._detect_immune = self._config.role_config.framer.immune_to_detection

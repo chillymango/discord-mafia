@@ -10,8 +10,6 @@ class Agent(MafiaRole):
     Shadow somebody to see who visited them and who they visited
     """
 
-    default_ability_uses = 3
-
     @classmethod
     def role_description(cls) -> str:
         """
@@ -44,3 +42,6 @@ class Agent(MafiaRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.MAFIA_SUPPORT]
+
+    def _role_specific_config_init(self) -> None:
+        self._nights_between_shadowings = self._config.role_config.agent.nights_between_shadowings

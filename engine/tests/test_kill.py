@@ -9,6 +9,7 @@ from engine.phase import TurnPhase
 from engine.player import Player
 from engine.role.base import Role
 from engine.role.base import RoleFactory
+from engine.setup import DEFAULT_CONFIG
 from engine.tribunal import Tribunal
 
 from engine.stepper import sleep_override
@@ -19,15 +20,15 @@ class TestKillingPowers(unittest.TestCase):
     
     def setUp(self) -> None:
         print("\n---Starting Test---\n")
-        self._game = Game()
+        self._game = Game(DEFAULT_CONFIG)
         self._game.messenger = mock.MagicMock()
         self._game.announce = mock.MagicMock()
         self._game.flush_all_messages = mock.MagicMock()
-        self._tribunal = Tribunal(self._game, {})
+        self._tribunal = Tribunal(self._game, sleeper=sleep_override)
         self._game.tribunal = self._tribunal
-        self._stepper = Stepper(self._game, {}, sleep_override)
+        self._stepper = Stepper(self._game, sleep_override)
         # test with defaults i guess
-        self._rf = RoleFactory({})
+        self._rf = RoleFactory(DEFAULT_CONFIG)
         self._actors = [
             Actor(Player("Albert Yang"), self._rf.create_by_name("Godfather"), self._game),
             Actor(Player("Anthony Chen"), self._rf.create_by_name("Vigilante"), self._game),
@@ -51,6 +52,12 @@ class TestKillingPowers(unittest.TestCase):
 
     def _run(self) -> None:
         for _ in range(2):
+            self._stepper.advance(self._game)
+
+    def step_to_next(self, phase: TurnPhase) -> None:
+        # step at least 1
+        self._stepper.advance(self._game)
+        while self._game.turn_phase != phase:
             self._stepper.advance(self._game)
 
     def test_godfather_ni(self) -> None:

@@ -46,7 +46,7 @@ class Actor:
         self._role: "Role" = role
 
         # role presented on death or on investigate
-        self._visible_role: "Role" = role if not role._detect_immune else Citizen
+        self._visible_role: "Role" = role
 
         # crimes that show up on standard investigate
         self._crimes = set()
@@ -194,6 +194,8 @@ class Actor:
         """
         Depending on game settings, return something for the investigative role exact check
         """
+        if self._role._detect_immune:
+            return "Citizen"
         return self._visible_role.name
 
     @property
@@ -249,16 +251,22 @@ class Actor:
         Depending on role, get a set of actors that are valid targets.
         """
         if self.is_alive:
+
             if self._role.target_group == TargetGroup.LIVE_PLAYERS:
                 targets = self._game.get_live_actors()
+
             elif self._role.target_group == TargetGroup.DEAD_PLAYERS:
                 targets = self._game.get_dead_actors()
+
             elif self._role.target_group == TargetGroup.LIVING_NON_MAFIA:
                 targets = self._game.get_live_non_mafia_actors()
+
             elif self._role.target_group == TargetGroup.LIVING_NON_TRIAD:
                 targets = self._game.get_live_non_triad_actors()
+
             elif self._role.target_group == TargetGroup.SELF:
                 targets = [self]
+
             elif self._role.target_group == TargetGroup.JAIL:
                 if self._game.turn_phase in (TurnPhase.DAYBREAK, TurnPhase.DAYLIGHT, TurnPhase.DUSK):
                     # during day, any live players
@@ -269,12 +277,34 @@ class Actor:
                         targets = [self._game._jail_map[self]]
                     else:
                         targets = []
+
+            elif self._role.target_group == TargetGroup.BEGUILER:
+                if self._game._config.role_config.beguiler.can_hide_behind_mafia:
+                    targets = self._game.get_live_actors()
+                else:
+                    targets = self._game.get_live_non_mafia_actors()
+
+            elif self._role.target_group == TargetGroup.KIDNAPPER:
+                if self._game.turn_phase in (TurnPhase.DAYBREAK, TurnPhase.DAYLIGHT, TurnPhase.DUSK):
+                    # during day, any live players
+                    if self._game._config.role_config.kidnapper.can_kidnap_mafia_members:
+                        targets = self._game.get_live_actors()
+                    else:
+                        targets = self._game.get_live_non_mafia_actors()
+                else:
+                    # during night, jailed target or nobody
+                    if self._game._jail_map.get(self) is not None:
+                        targets = [self._game._jail_map[self]]
+                    else:
+                        targets = []
+
             elif self._role.target_group == TargetGroup.VIGILANTE:
                 # vig cannot target anyone on N1
                 if self._game.turn_number == 1:
                     targets = []
                 else:
                     targets = self._game.get_live_actors()
+
             else:
                 targets = []
 

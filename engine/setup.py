@@ -5,14 +5,25 @@ The config should call out the setup.
 """
 import asyncio
 from collections import defaultdict
+from collections import deque
+from contextlib import contextmanager
+import logging
 import numpy as np
 import random
 import typing as T
 
+from aiogoogle.auth.creds import ServiceAccountCreds
+
+from engine.actor import Actor
+from engine.config import GameConfig
 from engine.role import NAME_TO_ROLE
+from engine.role.base import construct_role_group_tree_map
+from engine.role.base import role_group_tree
+from engine.role.base import get_group_map
 from engine.role.base import Role
 from engine.role.base import RoleFactory
 from engine.role.base import RoleGroup
+from engine.role.base import RoleGroupNode
 from engine.role.mafia.godfather import Godfather
 from engine.role.neutral.jester import Jester
 from engine.role.town.doctor import Doctor
@@ -20,9 +31,16 @@ from engine.role.town.investigator import Investigator
 from engine.role.town.escort import Escort
 from engine.stepper import sleep_override
 from engine.tribunal import Tribunal
+from util.string import camel_to_english
+import log
 
 if T.TYPE_CHECKING:
     from engine.game import Game
+    from engine.role.base import RoleGroupNode
+
+logger = logging.getLogger(__name__)
+logger.addHandler(log.ch)
+logger.setLevel(logging.INFO)
 
 
 # do not give bots advanced roles
@@ -87,34 +105,27 @@ EXAMPLE_CONFIG = {
         ],
         # scalings for odds in RoleGroup selections
         # if the role is not listed, it's assumed to be 0
-        "role_weights": {
-#            # Town Roles
-#            "Doctor": 0.3,
-#            "Escort": 0.5,
-#            "Lookout": 0.2,
-#            "Consort": 0.3,
-#
-#            # Mafia Roles
-#            "Godfather": 0.0,
-#
-#            # Triad Roles
-#
-#            # Neutral Roles
-
-        }
+        "role_weights": {}
     }
 }
 
-
-def get_group_map() -> T.Dict["RoleGroup", T.List["Role"]]:
-    from engine.role import ALL_ROLES
-    mapping = defaultdict(list)
-    for role in ALL_ROLES:
-        for group in role.groups():
-            mapping[group].append(role)
-
-    # do not return a defaultdict
-    return {key: value for key, value in mapping.items()}
+DEFAULT_CONFIG = GameConfig.default_with_role_list([
+    "Town Government",
+    "Town Protective",
+    "Town Investigative",
+    "Town Power",
+    "Town Killing",
+    "Town Support",
+    "Town Random",
+    "Town Random",
+    "Godfather",
+    "Mafia Random",
+    "Mafia Random",
+    "Neutral Killing",
+    "Neutral Random",
+    "Neutral Random",
+    "Any Random",
+])
 
 
 class WeightedSampler:
@@ -126,37 +137,72 @@ class WeightedSampler:
 
     def __init__(
         self,
-        setup_config: T.Dict[str, T.Any],
-        group_map: T.Dict["RoleGroup", T.List[T.Type["Role"]]]
+        role_weights: T.Dict[str, float],
+        excludes_list: T.List[T.Tuple[str, str]],
     ) -> None:
-        self._config = setup_config
-        self._group_map = group_map
-        self._initialize_weights()
+        self._role_weights = role_weights
+        self._excludes_list = excludes_list
+        self._group_map = get_group_map()
 
-    def _initialize_weights(self) -> None:
-        if 'role_weights' not in self._config or not self._config["role_weights"]:
-            print("Falling back to even weighting")
-            self._weights: T.Dict[T.Type["Role"], float] = defaultdict(lambda: 1.0)
-        else:
-            # if it's not in role weights, assume we don't want the role at all
-            self._weights: T.Dict[T.Type["Role"], float] = defaultdict(lambda: 0.0)
-            for role_name, weight in self._config["role_weights"].items():
-                role = NAME_TO_ROLE.get(role_name)
-                if role is None:
-                    print(f"Warning: unknown role {role_name}")
-                    continue
-                try:
-                    self._weights[role] = float(weight)
-                except ValueError:
-                    print(f"Warning: unknown weight {weight}. Using 0.0")
-                    self._weights[role] = 0.0
+        self._build_excludes_map()
+
+    def _build_excludes_map(self) -> None:
+        self._excludes_map: T.Dict[RoleGroup, T.List[Role]] = defaultdict(list)
+        role_group_tree_map = construct_role_group_tree_map()
+        for excluding, excluded in self._excludes_list:
+            try:
+                group = RoleGroup.create_from_name(excluded)
+                excluded_roles: T.List[Role] = list()
+                root = role_group_tree_map[group]
+                to_visit = [root]
+                while to_visit:
+                    node = to_visit.pop()
+                    for child in node._children:
+                        if isinstance(child, type):  # TODO: sloppy
+                            excluded_roles.append(child)
+                        elif isinstance(child, RoleGroupNode):
+                            to_visit.append(child)
+                        else:
+                            raise ValueError(f"Unknown {node}")
+                self._excludes_map[RoleGroup.create_from_name(excluding)].extend(excluded_roles)
+                continue
+            except:
+                pass
+
+            role = NAME_TO_ROLE.get(excluded)
+            if role is None:
+                raise ValueError(f"Unknown role {excluded}")
+            self._excludes_map[excluding].append(role)
+
+    @classmethod
+    def create_from_config(cls, config: "GameConfig") -> "WeightedSampler":
+        return cls(
+            role_weights=config.role_weights,
+            excludes_list=config.excludes_list,
+        )
+
+    @contextmanager
+    def temp_weights(self, **weights: T.Dict[str, T.Any]) -> T.Iterator[None]:
+        """
+        TODO: this is probably slower than it needs to be
+        """
+        orig = self._role_weights.copy()
+        try:
+            self._role_weights.update(weights)
+            yield
+        finally:
+            self._role_weights = orig.copy()
 
     def sample_from_group(self, role_group: "RoleGroup") -> T.Optional[T.Type["Role"]]:
         try:
             valid_roles = self._group_map.get(role_group)
+            for role in self._excludes_map[role_group]:
+                if role in valid_roles:
+                    valid_roles.remove(role)
             if not valid_roles:
                 return None
-            weight_vec = np.array([self._weights[r] for r in valid_roles])
+
+            weight_vec = np.array([self._role_weights.get(r, 0.3) for r in valid_roles])
             weight_vec = weight_vec / sum(weight_vec)
             return np.random.choice(
                 valid_roles,
@@ -169,7 +215,7 @@ class WeightedSampler:
             return valid_roles[0]
 
 
-def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG, override_player_count: bool = False, skip: bool = False) -> T.Tuple[bool, str]:
+def do_setup(game: "Game", config: "GameConfig" = DEFAULT_CONFIG, override_player_count: bool = False, skip: bool = False) -> T.Tuple[bool, str]:
     """
     If setup succeeds, return True
     Otherwise return False
@@ -179,159 +225,105 @@ def do_setup(game: "Game", config: T.Dict[str, T.Any] = EXAMPLE_CONFIG, override
     if game.get_actors():
         return False, "Game is already setup"
 
-    # get all known roles
-    setup_config: T.Dict = config.get("setup")
-    if setup_config is None or setup_config.get("role_list") is None or setup_config.get("role_weights") is None:
-        return False, "Malformed config"
+    if not config.role_list:
+        return False, "Missing setup config"
 
-    # each role has hardcoded defaults, these can be interpreted as overrides, and not technically necessary
-    role_config = config.get("roles", {})
-
-    role_list: T.List[str] = setup_config["role_list"]
+    role_list: T.List[str] = config.role_list[:]
     if not override_player_count and (len(game.players) != len(role_list)):
         return False, f"Mismatched number of players. Have {len(game.players)} and need {len(role_list)}"
 
-    required_roles: T.List[str] = []
-    flexible_roles: T.List[str] = []
-    for role in role_list:
-        spec_type, _, spec_name = role.partition('::')
-        if spec_type == "RoleGroup":
-            flexible_roles.append(spec_name)
-        elif spec_type == "RoleName":
-            required_roles.append(spec_name)
-        else:
-            return False, f"Unknown role specification type {spec_type}"
+    sampler = WeightedSampler.create_from_config(config)
+    rf = RoleFactory(config)
 
-    # process required roles first
-    all_roles: T.List[Role] = []
-    rf = RoleFactory(config=role_config)
-    for required in required_roles:
-        role = rf.create_by_name(required)
-        if role is None:
-            return False, f"Unknown role specification value {required}"
-        all_roles.append(role)
+    selected_roles: T.List[T.Type[Role]] = list()
+    node_order = dict([(camel_to_english(node.value), idx)
+                       for idx, node in enumerate(role_group_tree())])
 
-    # do the flexible roles
-    group_map = get_group_map()
+    # order our role_list by the node_order
+    role_list.sort(key=lambda x: node_order.get(x, -1))
 
-    sampler = WeightedSampler(setup_config, group_map)
-    for flexible in flexible_roles:
-        # pick a random role out of the ones that match
-        try:
-            role_group = RoleGroup(flexible)
-        except ValueError:
-            return False, f"Unknown Role Group {flexible}"
+    for role_spec_name in role_list:
+        # try to make an exact role first
+        if role_spec_name in NAME_TO_ROLE:
+            selected_roles.append(NAME_TO_ROLE[role_spec_name])
+            continue
 
-        max_tries = 50
         tries = 0
-        while True:
+        while tries < 3:
             tries += 1
-            if tries > max_tries:
-                raise ValueError(f"Failed to assign roles. Something wrong with {role_group.name}")
-            try:
-                role = sampler.sample_from_group(role_group)
-                if role.unique():
-                    found = False
-                    for existing in all_roles:
-                        if isinstance(existing, role):
-                            print(f'Skipping unique role {role.name}')
-                            found = True
-                            break
-                    if found:
-                        continue
-
-                if role.DISABLED:
-                    continue
-
-                all_roles.append(rf.create_role(role))
+            group = RoleGroup.create_from_name(role_spec_name)
+            sampled = sampler.sample_from_group(group)
+            if sampled is None:
+                return False, f"Could not sample from {group}"
+            
+            # vague preference in role assignments to avoid multiple
+            # copies of the same role but not forced
+            if sampled not in selected_roles:
+                selected_roles.append(sampled)
                 break
-            except Exception as exc:
-                print(repr(exc))
-                return False, f"Failed to sample from group {role_group}"
-    
-    # we have roles and players, do a random assignment 1:1
-    random.shuffle(all_roles)
-    try:
-        game.assign_roles(all_roles)
-    except ValueError as err:
-        return False, f"Failed to assign roles: {repr(err)}"
+        else:
+            # use the last one
+            selected_roles.append(sampled)
 
-    # create Tribunal
-    if skip:
-        sleep = sleep_override
-    else:
-        sleep = asyncio.sleep
-    game.tribunal = Tribunal(game, config.get("trial", {}))
+    if len(selected_roles) != len(game._players):
+        return False, f"Did not generate a full list of roles for the game"
 
+    # map out which actors can be selected for which roles
+    # people are eligible for every role except the ones they have on blocklist
+    eligible_players: T.Dict[Role, T.List[Player]] = dict()
+    for role in selected_roles:
+        eligible_players[role] = game._players[:]
+
+    for player in game._players:
+        if player in config.blocked_role:
+            blocked_role = NAME_TO_ROLE[config.blocked_role[player]]
+            eligible_players[blocked_role].remove(player)
+
+        if player in config.preferred_role:
+            preferred_role = NAME_TO_ROLE[config.preferred_role[player]]
+            eligible_players[preferred_role].extend([player] * 2)
+
+    # go from smallest group size to largest
+    ordered_roles = selected_roles[:]
+    ordered_roles.sort(key=lambda x: len(eligible_players.get(x, [])))
+    ordered_players: T.List[Player] = list()
+    for role in ordered_roles:
+        chosen_player = random.choice(eligible_players[role])
+
+        for remaining_players in eligible_players.values():
+            while chosen_player in remaining_players:
+                remaining_players.remove(chosen_player)
+
+        ordered_players.append(chosen_player)
+
+    game.add_actors(*[Actor(player, rf.create_role(role), game) for player, role in zip(ordered_players, ordered_roles)])
+    random.shuffle(game._actors)
+    game.tribunal = Tribunal(game)
+
+    for actor in game.actors:
+        actor.role.init_with_game(game)
     return True, "Successfully setup the game"
 
 
-def test(config = EXAMPLE_CONFIG) -> None:
-
-    # get all known roles
-    setup_config = config.get("setup")
-    if setup_config is None or setup_config.get("role_list") is None or setup_config.get("role_weights") is None:
-        return False, "Malformed config"
-
-    # each role has hardcoded defaults, these can be interpreted as overrides, and not technically necessary
-    role_config = config.get("role", {})
-
-    role_list: T.List[str] = setup_config["role_list"]
-
-    required_roles: T.List[str] = []
-    flexible_roles: T.List[str] = []
-    for role in role_list:
-        spec_type, _, spec_name = role.partition('::')
-        if spec_type == "RoleGroup":
-            flexible_roles.append(spec_name)
-        elif spec_type == "RoleName":
-            required_roles.append(spec_name)
-        else:
-            return False, f"Unknown role specification type {spec_type}"
-
-    # process required roles first
-    all_roles: T.List[Role] = []
-    rf = RoleFactory(config=role_config)
-    for required in required_roles:
-        role = rf.create_by_name(required)
-        if role is None:
-            return False, f"Unknown role specification value {required}"
-        all_roles.append(role)
-
-    # do the flexible roles
-    group_map = get_group_map()
-
-    sampler = WeightedSampler(setup_config, group_map)
-    for flexible in flexible_roles:
-        # pick a random role out of the ones that match
-        try:
-            role_group = RoleGroup(flexible)
-        except ValueError:
-            return False, f"Unknown Role Group {flexible}"
-
-        while True:
-            try:
-                role = sampler.sample_from_group(role_group)
-                if role.unique():
-                    found = False
-                    for existing in all_roles:
-                        if isinstance(existing, role):
-                            print(f'Skipping unique role {existing.name}')
-                            found = True
-                            break
-                    if found:
-                        continue
-
-                all_roles.append(rf.create_role(role))
-                break
-            except Exception as exc:
-                print(repr(exc))
-                return False, f"Failed to sample from group {role_group}"
-
-    return all_roles
-
-
 if __name__ == "__main__":
-    wtf = test()
-    print(wtf)
-    import IPython; IPython.embed()
+    import json
+    import random
+    from engine.config import SheetsFetcher
+    from engine.game import Game
+    from engine.player import Player
+    with open('service_token.json') as service_token:
+        token = json.loads(service_token.read())
+
+    creds = ServiceAccountCreds(**token)
+    fetch = SheetsFetcher(creds)
+    SHEET_ID = '1PMiXU_B2eATCXlZuFsEuKFa9KjDCSWdC9ONlQ6OZY6Q'
+
+    async def main() -> None:
+        config = await GameConfig.parse_from_google_sheets_id(SHEET_ID)
+        print('done?')
+        game = Game(config)
+        game.add_players(*[Player(f"Player-{random.randint(100, 999)}") for _ in range(15)])
+        success, msg = do_setup(game, config)
+        print(game.actors)
+
+    asyncio.run(main())

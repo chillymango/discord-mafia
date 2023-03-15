@@ -4,7 +4,6 @@ import time
 import typing as T
 
 from chatapi.discord.driver import BotMessageDriver
-from chatapi.discord.webhook import don_bot_message
 from engine.actor import Actor
 from engine.message import Message
 from engine.message import MessageType

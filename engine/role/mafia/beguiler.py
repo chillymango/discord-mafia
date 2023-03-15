@@ -1,6 +1,7 @@
 import typing as T
 from engine.action.redirect import Hide
 from engine.role.base import RoleGroup
+from engine.role.base import TargetGroup
 from engine.role.mafia import MafiaRole
 
 
@@ -35,9 +36,9 @@ class Beguiler(MafiaRole):
         """
         return "Hide behind someone each night, causing anyone who targets you to target them instead."
 
-    def _init_with_config(self) -> None:
-        super()._init_with_config()
-        self._can_hide_behind_team = self._config.get("can_hide_behind_team", True)
+    @property
+    def target_group(self) -> TargetGroup:
+        return TargetGroup.BEGUILER
 
     @classmethod
     def night_actions(cls):
@@ -46,3 +47,6 @@ class Beguiler(MafiaRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.MAFIA_DECEPTION]
+
+    def _role_specific_config_init(self) -> None:
+        self._can_hide_behind_team = self._config.role_config.beguiler.can_hide_behind_mafia

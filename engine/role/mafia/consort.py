@@ -34,3 +34,7 @@ class Consort(MafiaRole):
     @classmethod
     def night_actions(cls):
         return [Roleblock]
+
+    def _role_specific_config_init(self) -> None:
+        self._rb_immune = self._config.role_config.consort.cannot_be_roleblocked
+        self._detect_block_immune = self._config.role_config.consort.detects_block_immune_target

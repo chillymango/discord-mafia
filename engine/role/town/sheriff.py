@@ -49,3 +49,8 @@ class Sheriff(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_INVESTIGATIVE]
+
+    def _role_specific_config_init(self) -> None:
+        self._detects_mafia = self._config.role_config.sheriff.detects_mafia
+        self._detects_serial_killer = self._config.role_config.sheriff.detects_serial_killer
+        self._detects_mass_murderer = self._config.role_config.sheriff.detects_mass_murderer

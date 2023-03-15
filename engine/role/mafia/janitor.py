@@ -41,3 +41,6 @@ class Janitor(MafiaRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.MAFIA_DECEPTION]
+
+    def _role_specific_config_init(self) -> None:
+        self._ability_uses = self._config.role_config.janitor.number_of_sanitations

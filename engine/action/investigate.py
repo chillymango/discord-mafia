@@ -70,6 +70,9 @@ class PreInvestigate(Action):
     def target_text_success(self) -> str:
         return ""
 
+    def action_result(self, actor: "Actor", *targets: "Actor") -> T.Optional[bool]:
+        return True
+
 
 class InvestigateExact(Action):
     """

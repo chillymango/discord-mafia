@@ -4,6 +4,7 @@ Brought to you by ChatGPT
 A session is basically a single instance of a game.
 """
 import asyncio
+import logging
 import time
 import typing as T
 
@@ -26,7 +27,7 @@ from engine.message import Messenger
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
 from engine.player import Player
-from engine.setup import EXAMPLE_CONFIG
+from engine.setup import DEFAULT_CONFIG
 from engine.setup import do_setup
 from engine.stepper import sleep_override
 from engine.stepper import Stepper
@@ -40,6 +41,7 @@ from engine.wincon import JesterWin
 
 if T.TYPE_CHECKING:
     import disnake
+    from engine.config import GameConfig
 
 
 class Session:
@@ -47,24 +49,24 @@ class Session:
     def __init__(
         self,
         guild: "disnake.Guild",
-        config: T.Dict[str, T.Any] = EXAMPLE_CONFIG
+        config: "GameConfig "= DEFAULT_CONFIG
     ) -> None:
         self._guild = guild
         self._config = config
         self._server_task: asyncio.Task = None
 
         self._game = Game(config)
-        self._stepper = Stepper(self._game, self._config)
-        self._skipper = Stepper(self._game, self._config, sleeper=sleep_override)
-
-        self._bot_driver = None
-        self._discord_driver = None
-        self._webhook_driver = None
+        self._stepper = Stepper(self._game)
+        self._skipper = Stepper(self._game, sleeper=sleep_override)
 
         self._town_hall = TownHall(self._game, self._guild)
         self._game.town_hall = self._town_hall
 
         self._game_task: asyncio.Task = None
+
+    @property
+    def log(self) -> logging.Logger:
+        return self._game.log
 
     @property
     def bulletin(self) -> T.Optional["disnake.TextChannel"]:
@@ -96,9 +98,19 @@ class Session:
             await self._stepper.step()
 
     async def start(self) -> None:
-        result, msg = do_setup(self._game)
-        if not result:
-            raise RuntimeError(f"Failed to setup game: {msg}")
+        setup_attempt_count = 0
+        while setup_attempt_count <= 3:
+            setup_attempt_count += 1
+            result, msg = do_setup(self._game)
+            if not result:
+                self.log.warning(f"Failed to setup game: {msg}")
+                continue
+            break
+        else:
+            raise ValueError("Failed to setup game. Setup is likely unstable")
+
+        # TODO: block this out somewhere else
+        #self._game.debug_override_role("chilly mango", "Constable")
         #self._game.debug_override_role("donbot", "Blackmailer")
         #self._game.debug_override_role("mmmmmmmmmmmmm", "Mayor")
         #self._game.debug_override_role("pandomodger", "Judge")
@@ -107,11 +119,11 @@ class Session:
         #self._game.debug_override_role("asiannub", "Escort")
         #self._game.debug_override_role("wagyu jubei")
 
-        #self._server_task = asyncio.create_task(run_grpc_server(self._game))
         api.set_bot_api(BotApi(self._game))
 
         self._town_hall.initialize()
         await self._town_hall.prepare_for_game()
+        self._game.log.name = f"Game-{self._town_hall.ch_bulletin.name}"
 
         # create message drivers for our game
         drivers = [
@@ -155,7 +167,7 @@ class Session:
             TownWin,
             ExecutionerWin,
             SurvivorWin,
-            JesterWin
+            JesterWin,
         ]
         for wc in priority:
             if wc in win_conditions:
@@ -168,4 +180,4 @@ class Session:
         await asyncio.sleep(8.0)
         await self._town_hall.display_victory(winners, wc)
         channel_manager.mark_to_preserve(self._town_hall.ch_bulletin)
-        print("FIN")
+        self.log.info("FIN")

@@ -1,10 +1,12 @@
 from enum import Enum
 import asyncio
 import cachetools
+import logging
 import time
 import typing as T
 
 from engine.phase import TurnPhase
+import log
 
 if T.TYPE_CHECKING:
     from engine.actor import Actor
@@ -13,6 +15,11 @@ if T.TYPE_CHECKING:
     from chatapi.discord.driver import DiscordPrivateDriver
     from chatapi.discord.driver import DiscordPublicDriver
     from chatapi.discord.driver import WebhookDriver
+
+
+logger = logging.getLogger(__name__)
+logger.addHandler(log.ch)
+logger.setLevel(logging.INFO)
 
 
 class MessageType(Enum):
@@ -312,6 +319,10 @@ class Messenger:
         self._message_queue: asyncio.Queue[Message] = asyncio.Queue()
         self._drivers = drivers
         self._inbound_tasks: T.Set[asyncio.Task] = set()
+
+    @property
+    def log(self) -> logging.Logger:
+        return self._game.log
 
     async def run(self) -> None:
         print("Starting the message loop")

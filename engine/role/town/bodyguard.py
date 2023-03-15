@@ -51,3 +51,8 @@ class Bodyguard(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_PROTECTIVE, RoleGroup.TOWN_KILLING]
+
+    def _role_specific_config_init(self) -> None:
+        self._ignore_night_immunity = self._config.role_config.bodyguard.kill_ignores_night_immunity
+        self._cannot_be_healed = self._config.role_config.bodyguard.cannot_be_healed
+        self._knows_if_target_is_audited = self._config.role_config.bodyguard.knows_if_target_is_audited

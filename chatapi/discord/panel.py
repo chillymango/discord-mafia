@@ -600,7 +600,6 @@ class GraveyardPanel(PublicGamePanel):
         Can add fields with descriptions as we get them.
         """
         self._embed.title = "Graveyard"
-        self._embed.description = "No players have died yet."
         self._embed.clear_fields()
 
     def is_active(self) -> bool:
@@ -623,10 +622,6 @@ class GraveyardPanel(PublicGamePanel):
         Look at game's tombstones and update the fields
         """
         self._embed.clear_fields()
-        if self._game.graveyard:
-            self._embed.description = "No players have died yet."
-        else:
-            self._embed.description = ""
         for tombstone in self._game.graveyard:
             if tombstone.turn_phase in (TurnPhase.DAYBREAK, TurnPhase.DAYLIGHT, TurnPhase.DUSK):
                 phase_name = "Day"
@@ -1184,17 +1179,9 @@ class PossibleRolesPanel(PrivateGamePanel):
     def is_active(self) -> bool:
         return True
 
-    def update_embed(self) -> None:
-        role = self._actor.role
-
     def initialize(self) -> None:
         self._embed = disnake.Embed()
         self._embed.title = "**Setup Configuration**"
         self._embed.description = "\n"
-        setup_config = self._game._config.get("setup")
-        if setup_config is None:
-            return
-        for role_spec in setup_config.get("role_list", []):
-            _, _, spec_name = role_spec.partition('::')
-            #self._embed.add_field(name=spec_name, value)
-            self._embed.description += f"- {spec_name}\n"
+        for role_spec in self._game._config.role_list:
+            self._embed.description += f"- {role_spec}\n"

@@ -69,7 +69,8 @@ class TestRoles(unittest.TestCase):
             Player("Anthony Chen"),
             Player("William Yuan"),
             Player("Brandon Chen"),
-            Player("Kurtis Carsch")
+            Player("Kurtis Carsch"),
+            Player("James Holden"),
         ]
         rf = RoleFactory(self._config)
         self._roles = [
@@ -80,7 +81,8 @@ class TestRoles(unittest.TestCase):
             rf.create_role(Escort),
             rf.create_role(SerialKiller),
             rf.create_role(Investigator),
-            rf.create_role(Doctor)
+            rf.create_role(Doctor),
+            rf.create_by_name("Executioner"),
         ]
         self._game = Game()
         self._actors: T.List[Actor] = []

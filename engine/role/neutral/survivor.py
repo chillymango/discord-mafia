@@ -42,3 +42,6 @@ class Survivor(NeutralRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.NEUTRAL_BENIGN]
+
+    def _role_specific_config_init(self) -> None:
+        self._vests = self._config.role_config.survivor.number_of_bulletproof_vests

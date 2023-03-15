@@ -1,14 +1,21 @@
 """
 Kill-Report
 """
+import logging
 import typing as T
 
 from engine.message import Message
+import log
 
 if T.TYPE_CHECKING:
     from engine.actor import Actor
     from engine.game import Game
     from engine.message import Messenger
+
+
+logger = logging.getLogger(__name__)
+logger.addHandler(log.ch)
+logger.setLevel(logging.INFO)
 
 
 class DeathReporter:

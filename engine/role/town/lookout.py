@@ -43,3 +43,7 @@ class Lookout(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_INVESTIGATIVE]
+
+    def _role_specific_config_init(self) -> None:
+        self._ignores_detect_immunity = self._config.role_config.lookout.ignores_detection_immunity
+        self._can_target_self = self._config.role_config.lookout.can_target_self

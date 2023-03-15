@@ -21,9 +21,6 @@ class Kidnapper(MafiaRole):
     Jail action during day should fix target at night.
     """
 
-    # should only apply to night action
-    default_ability_uses = 1
-
     @classmethod
     def role_description(cls) -> str:
         """
@@ -70,3 +67,7 @@ class Kidnapper(MafiaRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.MAFIA_KILLING]
+
+    def _role_specific_config_init(self) -> None:
+        self._ability_uses = self._config.role_config.kidnapper.number_of_executions
+        self._can_kidnap_mafia_members = self._config.role_config.kidnapper.can_kidnap_mafia_members

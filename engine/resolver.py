@@ -5,6 +5,7 @@ After all submissions for actions are closed, each action-target association
 is inserted, an execution order is determined, and it's off to the races for
 state mutations.
 """
+import logging
 import typing as T
 
 if T.TYPE_CHECKING:
@@ -24,6 +25,10 @@ class SequenceEvent:
         self._targets = actor.targets
 
     @property
+    def log(self) -> logging.Logger:
+        return self._game.log
+
+    @property
     def actor(self) -> "Actor":
         return self._actor
 
@@ -41,9 +46,10 @@ class SequenceEvent:
         """
         self._action.reset_results()
         if not self._actor.has_ability_uses:
-            print("WARN: trying to execute ability without uses. How did this happen")
+            self.log.warning(f"{self._actor} tried to use ability with no ability uses left. Ignoring.")
             return
         if not self._action.validate_targets(self._targets):
+            self.log.warning(f"{self._actor} targeting {self._targets} failed to validate")
             return
         success = self._action.do_action(self._actor)
         if success is not None:

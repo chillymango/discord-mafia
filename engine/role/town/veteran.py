@@ -64,3 +64,7 @@ class Veteran(TownRole):
     @classmethod
     def groups(cls) -> T.List[RoleGroup]:
         return super().groups() + [RoleGroup.TOWN_POWER, RoleGroup.TOWN_KILLING]
+
+    def _role_specific_config_init(self) -> None:
+        self._ignores_invulnerability = self._config.role_config.veteran.ignores_invulnerability
+        self._ability_uses = self._config.role_config.veteran.number_of_alerts
