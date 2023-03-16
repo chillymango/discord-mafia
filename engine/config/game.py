@@ -10,77 +10,77 @@ from util.string import camel_to_snake
 if T.TYPE_CHECKING:
     from engine.role.base import Role
 
+from engine.config.vigilante import VigilanteSection
+from engine.config.marshall import MarshallSection
+from engine.config.judge import JudgeSection
+from engine.config.bodyguard import BodyguardSection
+from engine.config.agent import AgentSection
+from engine.config.executioner import ExecutionerSection
+from engine.config.kidnapper import KidnapperSection
+from engine.config.mayor import MayorSection
+from engine.config.serial_killer import SerialKillerSection
+from engine.config.godfather import GodfatherSection
+from engine.config.jailor import JailorSection
+from engine.config.armorsmith import ArmorsmithSection
+from engine.config.veteran import VeteranSection
+from engine.config.beguiler import BeguilerSection
+from engine.config.lookout import LookoutSection
+from engine.config.jester import JesterSection
+from engine.config.janitor import JanitorSection
+from engine.config.consort import ConsortSection
+from engine.config.party_host import PartyHostSection
+from engine.config.framer import FramerSection
+from engine.config.survivor import SurvivorSection
+from engine.config.doctor import DoctorSection
+from engine.config.constable import ConstableSection
+from engine.config.sheriff import SheriffSection
+from engine.config.mafioso import MafiosoSection
+from engine.config.consigliere import ConsigliereSection
+from engine.config.investigator import InvestigatorSection
+from engine.config.detective import DetectiveSection
+from engine.config.citizen import CitizenSection
+from engine.config.auditor import AuditorSection
+from engine.config.blackmailer import BlackmailerSection
+from engine.config.scumbag import ScumbagSection
 from engine.config.escort import EscortSection
 from engine.config.mass_murderer import MassMurdererSection
-from engine.config.lookout import LookoutSection
-from engine.config.vigilante import VigilanteSection
-from engine.config.jester import JesterSection
-from engine.config.investigator import InvestigatorSection
-from engine.config.kidnapper import KidnapperSection
-from engine.config.consigliere import ConsigliereSection
-from engine.config.executioner import ExecutionerSection
-from engine.config.marshall import MarshallSection
-from engine.config.mafioso import MafiosoSection
-from engine.config.mayor import MayorSection
-from engine.config.janitor import JanitorSection
-from engine.config.blackmailer import BlackmailerSection
-from engine.config.bodyguard import BodyguardSection
-from engine.config.serial_killer import SerialKillerSection
-from engine.config.beguiler import BeguilerSection
-from engine.config.scumbag import ScumbagSection
-from engine.config.godfather import GodfatherSection
-from engine.config.agent import AgentSection
-from engine.config.auditor import AuditorSection
-from engine.config.party_host import PartyHostSection
-from engine.config.veteran import VeteranSection
-from engine.config.citizen import CitizenSection
-from engine.config.consort import ConsortSection
-from engine.config.armorsmith import ArmorsmithSection
-from engine.config.constable import ConstableSection
-from engine.config.survivor import SurvivorSection
-from engine.config.sheriff import SheriffSection
-from engine.config.jailor import JailorSection
-from engine.config.detective import DetectiveSection
-from engine.config.framer import FramerSection
-from engine.config.doctor import DoctorSection
-from engine.config.judge import JudgeSection
 
 
 class RoleConfigMixin(BaseModel):
+    vigilante: VigilanteSection = Field(default_factory=VigilanteSection)
+    marshall: MarshallSection = Field(default_factory=MarshallSection)
+    judge: JudgeSection = Field(default_factory=JudgeSection)
+    bodyguard: BodyguardSection = Field(default_factory=BodyguardSection)
+    agent: AgentSection = Field(default_factory=AgentSection)
+    executioner: ExecutionerSection = Field(default_factory=ExecutionerSection)
+    kidnapper: KidnapperSection = Field(default_factory=KidnapperSection)
+    mayor: MayorSection = Field(default_factory=MayorSection)
+    serial_killer: SerialKillerSection = Field(default_factory=SerialKillerSection)
+    godfather: GodfatherSection = Field(default_factory=GodfatherSection)
+    jailor: JailorSection = Field(default_factory=JailorSection)
+    armorsmith: ArmorsmithSection = Field(default_factory=ArmorsmithSection)
+    veteran: VeteranSection = Field(default_factory=VeteranSection)
+    beguiler: BeguilerSection = Field(default_factory=BeguilerSection)
+    lookout: LookoutSection = Field(default_factory=LookoutSection)
+    jester: JesterSection = Field(default_factory=JesterSection)
+    janitor: JanitorSection = Field(default_factory=JanitorSection)
+    consort: ConsortSection = Field(default_factory=ConsortSection)
+    party_host: PartyHostSection = Field(default_factory=PartyHostSection)
+    framer: FramerSection = Field(default_factory=FramerSection)
+    survivor: SurvivorSection = Field(default_factory=SurvivorSection)
+    doctor: DoctorSection = Field(default_factory=DoctorSection)
+    constable: ConstableSection = Field(default_factory=ConstableSection)
+    sheriff: SheriffSection = Field(default_factory=SheriffSection)
+    mafioso: MafiosoSection = Field(default_factory=MafiosoSection)
+    consigliere: ConsigliereSection = Field(default_factory=ConsigliereSection)
+    investigator: InvestigatorSection = Field(default_factory=InvestigatorSection)
+    detective: DetectiveSection = Field(default_factory=DetectiveSection)
+    citizen: CitizenSection = Field(default_factory=CitizenSection)
+    auditor: AuditorSection = Field(default_factory=AuditorSection)
+    blackmailer: BlackmailerSection = Field(default_factory=BlackmailerSection)
+    scumbag: ScumbagSection = Field(default_factory=ScumbagSection)
     escort: EscortSection = Field(default_factory=EscortSection)
     mass_murderer: MassMurdererSection = Field(default_factory=MassMurdererSection)
-    lookout: LookoutSection = Field(default_factory=LookoutSection)
-    vigilante: VigilanteSection = Field(default_factory=VigilanteSection)
-    jester: JesterSection = Field(default_factory=JesterSection)
-    investigator: InvestigatorSection = Field(default_factory=InvestigatorSection)
-    kidnapper: KidnapperSection = Field(default_factory=KidnapperSection)
-    consigliere: ConsigliereSection = Field(default_factory=ConsigliereSection)
-    executioner: ExecutionerSection = Field(default_factory=ExecutionerSection)
-    marshall: MarshallSection = Field(default_factory=MarshallSection)
-    mafioso: MafiosoSection = Field(default_factory=MafiosoSection)
-    mayor: MayorSection = Field(default_factory=MayorSection)
-    janitor: JanitorSection = Field(default_factory=JanitorSection)
-    blackmailer: BlackmailerSection = Field(default_factory=BlackmailerSection)
-    bodyguard: BodyguardSection = Field(default_factory=BodyguardSection)
-    serial_killer: SerialKillerSection = Field(default_factory=SerialKillerSection)
-    beguiler: BeguilerSection = Field(default_factory=BeguilerSection)
-    scumbag: ScumbagSection = Field(default_factory=ScumbagSection)
-    godfather: GodfatherSection = Field(default_factory=GodfatherSection)
-    agent: AgentSection = Field(default_factory=AgentSection)
-    auditor: AuditorSection = Field(default_factory=AuditorSection)
-    party_host: PartyHostSection = Field(default_factory=PartyHostSection)
-    veteran: VeteranSection = Field(default_factory=VeteranSection)
-    citizen: CitizenSection = Field(default_factory=CitizenSection)
-    consort: ConsortSection = Field(default_factory=ConsortSection)
-    armorsmith: ArmorsmithSection = Field(default_factory=ArmorsmithSection)
-    constable: ConstableSection = Field(default_factory=ConstableSection)
-    survivor: SurvivorSection = Field(default_factory=SurvivorSection)
-    sheriff: SheriffSection = Field(default_factory=SheriffSection)
-    jailor: JailorSection = Field(default_factory=JailorSection)
-    detective: DetectiveSection = Field(default_factory=DetectiveSection)
-    framer: FramerSection = Field(default_factory=FramerSection)
-    doctor: DoctorSection = Field(default_factory=DoctorSection)
-    judge: JudgeSection = Field(default_factory=JudgeSection)
 
     @classmethod
     def get_list_of_sections(cls) -> T.List[T.Type["Section"]]:

@@ -1,3 +1,4 @@
+from enum import Enum
 import asyncio
 import random
 import typing as T
@@ -13,6 +14,8 @@ from chatapi.discord.driver import WebhookDriver
 from chatapi.discord.forward import ForwardChatMessages
 from chatapi.discord.panel import LobbyPanel
 from chatapi.discord.router import router
+from engine.config import GameConfig
+from engine.game_format import GameFormat
 from engine.message import Messenger
 from engine.game import Game
 from engine.phase import TurnPhase
@@ -105,13 +108,20 @@ class NewLobby:
     where they fit
     """
 
-    def __init__(self, guild: "disnake.Guild", channel: "disnake.TextChannel",  debug: bool = False):
+    def __init__(
+        self,
+        guild: "disnake.Guild",
+        channel: "disnake.TextChannel",
+        format: GameFormat = GameFormat.SPEED,
+        debug: bool = False,
+    ):
         self._channel = channel
+        self._format = format
         self._guild = guild
         self._debug = debug
         self.users: T.List[T.Union["disnake.User", "BotUser"]] = list()
         self.players: T.Dict[T.Union["disnake.User", "BotUser"], Player] = dict()
-        self.panel = LobbyPanel(self._channel, self.users, debug=debug)
+        self.panel = LobbyPanel(self._channel, self.users, game_format=self._format, debug=debug)
 
         self.state = LobbyState.OPEN
 
@@ -180,7 +190,21 @@ class NewLobby:
             print(f"someone naughty: {interaction.user.name}")
             await interaction.send("Command only available to lobby host", ephemeral=True, delete_after=5.0)
             return
-        self._session = Session(self._guild)
+
+        if self._format == GameFormat.FORUM:
+            SHEET_ID = '1PMiXU_B2eATCXlZuFsEuKFa9KjDCSWdC9ONlQ6OZY6Q'
+        else:
+            SHEET_ID = '15Vc7Ful-GAXqO9DrOTaosWbYugsXSIRil7mtjgA3kBc'
+
+        attempts = 0
+        while attempts <= 5:
+            try:
+                config = await GameConfig.parse_from_google_sheets_id(SHEET_ID)
+                break
+            except Exception:
+                attempts += 1
+
+        self._session = Session(self._guild, config=config)
         players = []
         for user in self.users:
             if self.players.get(user):

@@ -18,11 +18,11 @@ class SequenceEvent:
     This represents a player issuing an action request.
     """
 
-    def __init__(self, action: "Action", actor: "Actor"):
+    def __init__(self, action: "Action", actor: "Actor", targets: T.List["Actor"] = None):
         self._action = action
         self._actor = actor
         self._game = actor.game
-        self._targets = actor.targets
+        self._targets = targets or actor.targets
 
     @property
     def log(self) -> logging.Logger:
@@ -51,7 +51,7 @@ class SequenceEvent:
         if not self._action.validate_targets(self._targets):
             self.log.warning(f"{self._actor} targeting {self._targets} failed to validate")
             return
-        success = self._action.do_action(self._actor)
+        success = self._action.do_action(self._actor, *self._targets)
         if success is not None:
             self._actor.role._ability_uses -= 1
         self._action.update_crimes(self._actor, success)

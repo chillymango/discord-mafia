@@ -41,4 +41,8 @@ class Jail(Action):
             actor.game.prepare_jail(actor, target)
             # refund the ability use since we only deduct if we execute
             actor.role._ability_uses += 1
+
+            # redirect target if applicable
+            if target.role._intercept_rb:
+                target.choose_targets(actor)
             return True

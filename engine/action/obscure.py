@@ -24,7 +24,7 @@ class Obscure(Action):
     def action_result(self, actor: "Actor", target: "Actor") -> T.Optional[bool]:
         if not target.is_alive:
             target._visible_role = None
-            target._last_will = None  # None means LW was obscured, empty string means intentional
+            target._last_will = None  # None means LW was obscured, empty string means empty LW
             return True
         # do not deduct ability usage if obscuring did not succeeed
         return None

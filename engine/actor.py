@@ -3,17 +3,21 @@ Data class which contains all information associated with an active player (acto
 in a single game.
 """
 from contextlib import contextmanager
+import logging
 import typing as T
 
 from engine.action.base import TargetGroup
 from engine.action.lynch import Lynch
+from engine.action.kill import JesterSuicide
 from engine.affiliation import MAFIA
 from engine.affiliation import NEUTRAL
 from engine.affiliation import TOWN
 from engine.affiliation import TRIAD
 from engine.crimes import Crime
 from engine.message import Message
+from engine.resolver import SequenceEvent
 from engine.role.base import RoleGroup
+from engine.role.neutral.jester import Jester
 from engine.role.town.citizen import Citizen
 from engine.phase import TurnPhase
 from proto import state_pb2
@@ -106,6 +110,10 @@ class Actor:
         self.hitpoints = 1.0
         self._attacked_by = []
         self._corpse_death_note = ""
+
+    @property
+    def log(self) -> logging.Logger:
+        return self._game.log
 
     @property
     def is_jailed(self) -> bool:
@@ -321,20 +329,6 @@ class Actor:
             return targets
         return []
 
-    def get_lynch_options(self, as_str: bool = False) -> T.List["Actor"]:
-        """
-        You can always vote for any live player except yourself
-
-        ...wait fuck it make it so you can vote for yourself
-        """
-        options = self._game.get_live_actors()
-        if as_str:
-            return [x.name for x in options]
-        return options
-
-    def lynch_vote(self, actor: "Actor") -> None:
-        self._lynch_vote = actor
-
     def choose_targets(self, *targets: "Actor") -> None:
         """
         Since this is going to be connected to the chatbot input, we don't do validation
@@ -348,12 +342,6 @@ class Actor:
         This should run after actions start processing during day and night phase
         """
         self._targets = list()
-    
-    def reset_lynch_vote(self) -> None:
-        """
-        This should run when day finishes
-        """
-        self._lynch_vote = None
 
     @property
     def name(self) -> str:
@@ -365,6 +353,14 @@ class Actor:
         """
         self._attacked_by = [Lynch]
         self.kill()
+
+        if isinstance(self.role, Jester):
+            if self._game._config.role_config.jester.random_guilty_voter_dies:
+                # make the selection here and queue it into suicide queue
+                selected = self._game.get_live_actors(shuffle=True)[0]
+                event = SequenceEvent(JesterSuicide(), selected, [selected])
+                self.log.info(f"Selected {selected} for jester suicide")
+                self._game._night_queue.append(event)
 
     @property
     def lynched(self) -> bool:

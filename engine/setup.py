@@ -193,16 +193,23 @@ class WeightedSampler:
         finally:
             self._role_weights = orig.copy()
 
-    def sample_from_group(self, role_group: "RoleGroup") -> T.Optional[T.Type["Role"]]:
+    def sample_from_group(self, role_group: "RoleGroup", chosen: T.List[T.Type["Role"]] = None) -> T.Optional[T.Type["Role"]]:
+        chosen = chosen or list()
+
         try:
             valid_roles = self._group_map.get(role_group)
             for role in self._excludes_map[role_group]:
                 if role in valid_roles:
                     valid_roles.remove(role)
+
+            for role in chosen:
+                if role.unique() and role in valid_roles:
+                    valid_roles.remove(role)
+
             if not valid_roles:
                 return None
 
-            weight_vec = np.array([self._role_weights.get(r, 0.3) for r in valid_roles])
+            weight_vec = np.array([float(self._role_weights.get(camel_to_english(r.__name__), 0.3)) for r in valid_roles])
             weight_vec = weight_vec / sum(weight_vec)
             return np.random.choice(
                 valid_roles,
@@ -215,7 +222,12 @@ class WeightedSampler:
             return valid_roles[0]
 
 
-def do_setup(game: "Game", config: "GameConfig" = DEFAULT_CONFIG, override_player_count: bool = False, skip: bool = False) -> T.Tuple[bool, str]:
+def do_setup(
+    game: "Game",
+    config: "GameConfig" = DEFAULT_CONFIG,
+    override_player_count: bool = False,
+    skip: bool = False
+) -> T.Tuple[bool, str]:
     """
     If setup succeeds, return True
     Otherwise return False
@@ -249,10 +261,10 @@ def do_setup(game: "Game", config: "GameConfig" = DEFAULT_CONFIG, override_playe
             continue
 
         tries = 0
-        while tries < 3:
+        while tries < 2:
             tries += 1
             group = RoleGroup.create_from_name(role_spec_name)
-            sampled = sampler.sample_from_group(group)
+            sampled = sampler.sample_from_group(group, selected_roles)
             if sampled is None:
                 return False, f"Could not sample from {group}"
             
@@ -321,9 +333,11 @@ if __name__ == "__main__":
     async def main() -> None:
         config = await GameConfig.parse_from_google_sheets_id(SHEET_ID)
         print('done?')
-        game = Game(config)
-        game.add_players(*[Player(f"Player-{random.randint(100, 999)}") for _ in range(15)])
-        success, msg = do_setup(game, config)
-        print(game.actors)
+        for _ in range(100):
+            game = Game(config)
+            game.add_players(*[Player(f"Player-{random.randint(100, 999)}") for _ in range(15)])
+            success, msg = do_setup(game, config)
+            print(game.actors)
+            print('\n')
 
     asyncio.run(main())

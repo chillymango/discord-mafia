@@ -11,8 +11,6 @@ from engine.wincon import EvilWin
 
 class Judge(NeutralRole):
 
-    default_ability_uses = 1
-
     @classmethod
     def win_condition(cls) -> T.Type[WinCondition]:
         return EvilWin

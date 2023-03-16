@@ -24,6 +24,7 @@ from chatapi.discord.panel import GraveyardPanel
 from chatapi.discord.panel import JailPanel
 from chatapi.discord.panel import JudgePanel
 from chatapi.discord.panel import NightPanel
+from chatapi.discord.panel import OriginalRolesPanel
 from chatapi.discord.panel import TribunalPanel
 from chatapi.discord.panel import WelcomePanel
 from chatapi.discord.panel import VictoryPanel
@@ -297,6 +298,10 @@ class TownHall:
 
     async def display_victory(self, winners: T.List["Actor"], win_con: "WinCondition") -> None:
         panel = VictoryPanel(self._game, self.ch_bulletin, winners, win_con)
+        await panel.drive()
+
+    async def display_original_roles(self) -> None:
+        panel = OriginalRolesPanel(self._game, self.ch_bulletin)
         await panel.drive()
 
     @property

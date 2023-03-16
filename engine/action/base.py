@@ -55,10 +55,11 @@ class Action:
         """
         raise NotImplementedError(f"Base class {self.__class__.__name__} must define action")
 
-    def do_action(self, actor: "Actor") -> T.Optional[bool]:
-        if not actor.targets:
+    def do_action(self, actor: "Actor", *targets: "Actor") -> T.Optional[bool]:
+        targets = targets or actor.targets
+        if not targets:
             return None
-        return self.action_result(actor, *actor.targets)
+        return self.action_result(actor, *targets)
 
     def update_crimes(self, actor: "Actor", success: bool) -> None:
         """

@@ -27,7 +27,8 @@ class Court(Action):
         """
         Modify the Tribunal for the day.
         """
-        if actor.game.tribunal.judge_action(actor):
+        vote_count = actor.game._config.role_config.judge.vote_count
+        if actor.game.tribunal.judge_action(actor, votes=vote_count):
             if not actor.game.town_hall.call_court():
-                print(f"Warning: TownHall failed to call court? Def need to fix")
+                actor.game.log.warning("TownHall failed to call court")
             return True

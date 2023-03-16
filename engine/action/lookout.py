@@ -32,5 +32,9 @@ class Lookout(Action):
         """
         Publish a private message to our actor with results.
         """
-        self._action_result["visitors"] = [anon.name for anon in actor.game.get_live_actors() if target in anon.targets]
+        role_config = actor.game._config.role_config
+        if role_config.lookout.ignores_detection_immunity or not target.role._detect_immune:
+            self._action_result["visitors"] = [anon.name for anon in actor.game.get_live_actors() if target in anon.targets]
+        else:
+            self._action_result["visitors"] = []
         return True

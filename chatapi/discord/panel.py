@@ -9,10 +9,12 @@ from chatapi.discord.icache import icache
 from chatapi.discord.router import router
 from engine.affiliation import MAFIA
 from engine.affiliation import TRIAD
+from engine.game_format import GameFormat
 from engine.message import Message
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
 from engine.resolver import SequenceEvent
+from engine.role.neutral.executioner import Executioner
 from engine.role.neutral.judge import Judge
 from engine.tribunal import TribunalState
 
@@ -282,11 +284,18 @@ class LobbyPanel(Panel):
     TITLE = "Mafia Lobby"
     DESCRIPTION = "Need 15 players to start"
 
-    def __init__(self, channel: "disnake.TextChannel", users: T.List[T.Union["User", "BotUser"]], debug: bool = False) -> None:
-        super().__init__(channel, debug=debug)
-        # lets gooo pass by reference
+    def __init__(
+        self,
+        channel: "disnake.TextChannel",
+        users: T.List[T.Union["User", "BotUser"]],
+        game_format: GameFormat = GameFormat.SPEED,
+        debug: bool = False
+    ) -> None:
         self._users = users
         self._closed = False
+        self._format = game_format
+        super().__init__(channel, debug=debug)
+        # lets gooo pass by reference
 
     def initialize(self) -> None:
         """
@@ -296,7 +305,7 @@ class LobbyPanel(Panel):
         Players should be indicated as either human or bot
         depending on where they came from.
         """
-        self._embed.title = self.TITLE
+        self._embed.title = f"{self.TITLE} ({self._format.name.capitalize()})"
         self._embed.description = self.DESCRIPTION
 
         # a row for join/leave lobby interaction
@@ -678,10 +687,14 @@ class DayPanel(PrivateGamePanel):
             self._actor.choose_targets(actor)
 
             # if there are any instant actions, do them immediately
+            should_reset = False
             for action in self._actor.role.day_actions():
                 if action.instant():
-                    event = SequenceEvent(action(), self._actor)
-                    event.execute()
+                    SequenceEvent(action(), self._actor).execute()
+                    should_reset = True
+
+            if should_reset:
+                self._actor.reset_target()
 
             await interaction.response.defer()
 
@@ -692,6 +705,11 @@ class DayPanel(PrivateGamePanel):
             f"**Action**:\n{self._actor.role.day_action_description()}\n\n"
         if self._actor.has_day_action and self._actor.role._ability_uses == 0:
             self._embed.description += f"**Uses Left**:\n{self._actor.role._ability_uses}\n\n"
+        if isinstance(self._actor.role, Executioner):
+            exec_targ = self._actor.role.executioner_target
+            if exec_targ is not None:
+                self._embed.description += \
+                f"Your target is {exec_targ.name}\n\n"
         # TODO: add statuses, like:
         #   * gov reveal
         #   * blackmailed / 49'd
@@ -1096,6 +1114,12 @@ class WelcomePanel(PrivateGamePanel):
             f"{role.role_description()}\n\n" \
             f"**Affiliation**:\n" \
             f"{role.affiliation_description()}\n\n"
+        if isinstance(role, Executioner):
+            exec_targ: Executioner = self._actor.role.executioner_target
+            exec_name = exec_targ.name if exec_targ is not None else "Unknown"
+            self._embed.description += \
+            f"**Target**:\n" + \
+            f"{exec_name}\n\n"
         if role.affiliation() == MAFIA:
             self._embed.description += \
             f"**Mafia Team**:\n" + \
@@ -1140,6 +1164,18 @@ class VictoryPanel(PublicGamePanel):
         self._embed.description = "Thanks for playing!\n\n**Congratulations to**\n"
         for winner in self._winners:
             self._embed.add_field(name=winner.name, value=winner.role.name, inline=False)
+
+
+class OriginalRolesPanel(PublicGamePanel):
+
+    def is_active(self) -> bool:
+        return True
+
+    def initialize(self) -> None:
+        self._embed = disnake.Embed()
+        self._embed.title = "All Roles"
+        for actor in self._game.actors:
+            self._embed.add_field(name=actor.name, value=actor.role.name, inline=False)
 
 
 class JailPanel(NightPanel):

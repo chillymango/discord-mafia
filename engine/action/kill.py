@@ -175,21 +175,25 @@ class SerialKillerKill(Kill):
         return "You were killed by a Serial Killer"
 
     # if you were jailed and you're still alive, kill your jailor
-    def action_result(self, actor: "Actor", target: "Actor") -> T.Optional[bool]:
-        """
-        TODO: jailor interception on SK instead of Jailor feels wrong
-        """
-        if actor.in_jail:
-            # get first jailor, this will be random
-            for jailor, prisoner in actor.game._jail_map.items():
-                if prisoner == actor:
-                    # switch target so we can see SK visited jailor
-                    actor.choose_targets(jailor)
-                    return super().action_result(actor, jailor)
-
-        # default fallback is to just do original action
-        # if we were jailed originally this should be a no-target
-        return super().action_result(actor, target)
+#    def action_result(self, actor: "Actor", target: "Actor") -> T.Optional[bool]:
+#        """
+#        TODO: jailor interception on SK instead of Jailor feels wrong
+#        """
+#        if actor.in_jail:
+#            actor.game.log.info("We are in jail")
+#            # get first jailor, this will be random
+#            for jailor, prisoner in actor.game._jail_map.items():
+#                if prisoner == actor:
+#                    # switch target so we can see SK visited jailor
+#                    actor.game.log.info(f"Serial killer intercept for {actor} and {target}")
+#                    actor.choose_targets(jailor)
+#                    return super().action_result(actor, jailor)
+#            else:
+#                actor.game.log.warning(f"Could not find a jail cell for {actor}")
+#
+#        # default fallback is to just do original action
+#        # if we were jailed originally this should be a no-target
+#        return super().action_result(actor, target)
 
 
 class ArsonistKill(Kill):
@@ -398,7 +402,11 @@ class ConstableKill(Kill):
 class Suicide(Kill):
     """
     Player-committed suicide
+
+    Suicides should always go first.
     """
+
+    ORDER = 0
 
     @classmethod
     def kill_report_text(cls) -> str:
@@ -416,14 +424,21 @@ class Suicide(Kill):
         return "You hear a single shot ring out in the night."
 
 
-class WitchSuicide(Kill):
+class JesterSuicide(Suicide):
+
+    @classmethod
+    def kill_report_text(cls) -> str:
+        return "Shot themselves out of guilt over the Jester"
+
+
+class WitchSuicide(Suicide):
 
     @classmethod
     def kill_report_text(cls) -> str:
         return "Struggled, and then shot themselves"
 
 
-class BusSuicide(Kill):
+class BusSuicide(Suicide):
     """
     Bus-driver induced suicide
 
@@ -444,7 +459,7 @@ class BusSuicide(Kill):
         return "You hear the loud sound of a bus crashing."
 
 
-class HeartAttack(Kill):
+class HeartAttack(Suicide):
     """
     AFK / leaver kill
     """

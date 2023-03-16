@@ -74,6 +74,7 @@ class Tribunal:
         self._defense_period = self._config.timing.trial_defense_duration
         self._lynch_vote_period = self._config.timing.lynch_vote_duration
         self._skip_first_day = self._config.timing.skip_first_day
+        self._first_day_duration = self._config.timing.first_day_duration
 
         self._marshall_lynches = self._config.role_config.marshall.executions_per_group
 
@@ -216,13 +217,7 @@ class Tribunal:
         if self._skip_first_day and self._game.turn_number == 1:
             # pre-game discussion i guess
             # TODO: uncomment
-            await asyncio.sleep(30.0)
-            #self.messenger.queue_message(Message.announce(
-            #    self._game,
-            #    "We Will Reconvene Tomorrow",
-            #    "Tomorrow we shall begin the trials and the lynchings"
-            #))
-            #await asyncio.sleep(7.0)
+            await asyncio.sleep(self._first_day_duration)
             return
 
         self._state = TribunalState.TRIAL_VOTE
@@ -300,9 +295,8 @@ class Tribunal:
                 await self._sleep(5.0)
 
                 self._on_trial.lynch()
-                self._game.death_reporter.report_death(self._on_trial)
 
-                # do not announce imediately
+                # do not announce deaths immediately
                 self._lynches_left -= 1
                 await self._sleep(10.0)
                 if self._lynches_left > 0:
@@ -318,7 +312,8 @@ class Tribunal:
             await self._sleep(0.1)
         else:
             self._state = TribunalState.CLOSED
-            return
+
+        self._game.death_reporter.report_all_deaths()
 
     @property
     def show_lynch_vote_view(self) -> bool:
@@ -407,6 +402,9 @@ class Tribunal:
         Get the string that describes the lynch votes.
         """
         output = ""
+
+        if self._trial_type == TrialType.MULTI:
+            return ""
 
         for actor in self._game.get_live_actors():
             if actor == self._on_trial:

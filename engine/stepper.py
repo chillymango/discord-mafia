@@ -231,6 +231,8 @@ class Stepper:
         await self._flush_then_wait_for_min_time(10.0, self._dusk_to_night)
 
         events: T.List[SequenceEvent] = list()
+        events.extend(self._game._day_queue)
+        self._game._day_queue = list()
         for actor in self._game.get_live_actors():
     
             actor.reset_health()
@@ -259,9 +261,10 @@ class Stepper:
             for ev in valid_events:
                 ev.execute()
 
-        # after this is done, reset everyone's targets
+        # after this is done, reset everyone's day targets
         for actor in self._game.get_live_actors():
-            actor.reset_target()
+            if actor.has_day_action:
+                actor.reset_target()
 
         # convert Mafia members if necessary
         valid_mafia = self._game.get_live_mafia_actors(shuffle=True)
@@ -277,14 +280,10 @@ class Stepper:
         else:
             # check for consigliere
             if to_promote is not None:
-                to_promote.choose_targets(to_promote)
-                SequenceEvent(ConsiglierePromote(), to_promote).execute()
-                to_promote.reset_target()
+                SequenceEvent(ConsiglierePromote(), to_promote, to_promote).execute()
             # promote mafia if any left
             elif actor is not None:
-                actor.choose_targets(actor)
-                SequenceEvent(MafiosoDemote(), actor).execute()
-                actor.reset_target()
+                SequenceEvent(MafiosoDemote(), actor, actor).execute()
             else:
                 print("No valid promotions?")
 
@@ -292,7 +291,7 @@ class Stepper:
         for executioner in self._game.get_live_actors_by_role(Executioner):
             exec_target: "Actor" = executioner.role.executioner_target
             if not exec_target.is_alive and not exec_target.lynched:
-                SequenceEvent(ExecutionerLoss(), executioner).execute()
+                SequenceEvent(ExecutionerLoss(), executioner, [executioner]).execute()
 
         await self._sleep(3.0)
 
@@ -324,6 +323,8 @@ class Stepper:
     
         # take all live actors and their targets and create SequenceEvent objects for them
         events: T.List[SequenceEvent] = []
+        events.extend(self._game._night_queue)
+        self._game._night_queue = list()
         for actor in self._game.get_live_actors():
     
             actor.reset_health()
@@ -332,7 +333,7 @@ class Stepper:
                 # TODO: kinda inefficient but whatevs hack it
                 action = action_class()
                 events.append(SequenceEvent(action, actor))
-    
+
         # process events in order -- group them by ORDER attribute value
         grouped_events: T.Dict[int, T.List[SequenceEvent]] = defaultdict(list)
         for event in events:
@@ -357,7 +358,8 @@ class Stepper:
         for actor in self._game.get_live_actors():
             # TODO: something that manages this for us would be nice?
             actor.consume_vest()
-            actor.reset_target()
+            if actor.has_night_action:
+                actor.reset_target()
 
         self._game._jail_map = dict()
 

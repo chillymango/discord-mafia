@@ -36,7 +36,7 @@ class Vigilante(TownRole):
         """
         This should describe the night action at a high-level.
         """
-        return "Choose one target to kill each night."
+        return "Choose one target to kill each night. You cannot kill on the first night."
 
     @classmethod
     def night_actions(cls) -> ActionSequence:
@@ -48,8 +48,8 @@ class Vigilante(TownRole):
         """
         return [VigilanteKill]
 
-    @classmethod
-    def target_group(cls) -> TargetGroup:
+    @property
+    def target_group(self) -> TargetGroup:
         """
         Vig target group is special in that on Night 1 they can't kill
         """

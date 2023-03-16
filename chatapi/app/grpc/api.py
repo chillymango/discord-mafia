@@ -232,14 +232,18 @@ class GrpcBotApi(service_pb2_grpc.GrpcBotApiServicer):
     def submit_target(self, request: command_pb2.TargetRequest, api_call: T.Callable) -> command_pb2.TargetResponse:
         bot = self.get_bot(request.bot_id)
         bot_actor = self._bot_api.game.get_actor_by_name(bot.name)
-        voted_actor = self._bot_api.game.get_actor_by_name(request.target_name, raise_if_missing=True)
-        api_call(bot_actor, voted_actor)
-        try:
-            for action in bot_actor.role.day_actions() + bot_actor.role.night_actions():
-                if action.instant():
-                    SequenceEvent(action(), voted_actor).execute()
-        except Exception as exc:
-            logger.exception(exc)
+        if request.target_name is not None:
+            voted_actor = self._bot_api.game.get_actor_by_name(request.target_name, raise_if_missing=True)
+            api_call(bot_actor, voted_actor)
+            try:
+                for action in bot_actor.role.day_actions() + bot_actor.role.night_actions():
+                    if action.instant():
+                        SequenceEvent(action(), voted_actor).execute()
+                        bot_actor.reset_target()
+            except Exception as exc:
+                logger.exception(exc)
+        else:
+            bot_actor.reset_target()
 
         return command_pb2.TargetResponse(timestamp=time.time())
 

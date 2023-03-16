@@ -18,12 +18,15 @@ from engine.player import Player
 from engine.role.base import Role
 from engine.role.base import RoleFactory
 from engine.role.neutral.executioner import Executioner
+from engine.role.neutral.jester import Jester
+from engine.setup import GameConfig
 from engine.tribunal import Tribunal
 
 from engine.setup import do_setup
 from engine.stepper import sleep_override
 from engine.stepper import Stepper
 from engine.wincon import ExecutionerWin
+from engine.wincon import JesterWin
 from engine.wincon import WinCondition
 
 
@@ -31,25 +34,33 @@ class TestNeutralBenignRoles(unittest.TestCase):
 
     def setUp(self) -> None:
         print("\n---Starting Test---\n")
-        self._game = Game()
-        self._game.messenger = mock.MagicMock()
-        self._tribunal = Tribunal(self._game, {})
-        self._game.tribunal = self._tribunal
-        self._stepper = Stepper(self._game, {}, sleep_override)
-        # test with defaults i guess
-        self._rf = RoleFactory({})
         role_list = [
-            "RoleName::Executioner",
-            "RoleName::Jester",
-            "RoleName::Bodyguard",
-            "RoleName::Mayor",
-            "RoleName::Vigilante",
-            "RoleName::Godfather",
-            "RoleName::Survivor",
+            "SerialKiller",
+            "MassMurderer",
+            "Executioner",
+            "Jester",
+            "Survivor",
+            "Godfather",
+            "Janitor",
+            "Kidnapper",
+            "Mayor",
+            "Bodyguard",
+            "Investigator",
+            "Jailor",
+            "Detective",
+            "Lookout",
+            "Doctor",
         ]
-        players = [Player(str(random.randint(1000, 10000))) for p in role_list]
+        config = GameConfig.default_with_role_list(role_list)
+        self._game = Game(config)
+        self._game.messenger = mock.MagicMock()
+        self._tribunal = Tribunal(self._game)
+        self._game.tribunal = self._tribunal
+        self._stepper = Stepper(self._game, sleep_override)
+        # test with defaults i guess
+        self._rf = RoleFactory(config)
+        players = [Player(str(random.randint(1000, 10000))) for p in range(15)]
         self._game.add_players(*players)
-        config = {'setup': {'role_list': role_list, 'role_weights': {}}}
         success, msg = do_setup(self._game, config=config)
         self.assertTrue(success, msg)
 
@@ -141,8 +152,45 @@ class TestNeutralBenignRoles(unittest.TestCase):
         target.kill()
         self._game.death_reporter.report_death(target)
 
-        self.step_to_next(TurnPhase.NIGHT)
+        self.step_to_next(TurnPhase.NIGHT_SEQUENCE)
         self.assertEqual(exec.role.name, "Jester")
+
+    def test_jester_lynch_causes_death_following_night(self) -> None:
+        """
+        Lynch the Jester, then make sure graveyard has a suicide in it
+        """
+        self.step_to_next(TurnPhase.DAYLIGHT)
+        jester = self._game.get_live_actors_by_role(Jester)[0]
+
+        jester.lynch()
+
+        self.assertEqual(len(self._game.graveyard), 1)
+
+        self.step_to_next(TurnPhase.DAYLIGHT)
+        self.assertEqual(len(self._game.graveyard), 2)
+
+        # make sure the Jester wins here too
+        wcs, winners = self._evaluate_win()
+        self.assertIn(JesterWin, wcs)
+
+    def test_jester_killed_loses(self) -> None:
+        """
+        Kill the Jester and make sure the Jester loses
+        """
+        self.step_to_next(TurnPhase.DAYLIGHT)
+        jester = self._game.get_live_actors_by_role(Jester)[0]
+        jester.kill()
+
+        wcs, winners = self._evaluate_win()
+        self.assertNotIn(JesterWin, wcs)
+
+        self.step_to_next(TurnPhase.DAYLIGHT)
+        self.assertEqual(len(self._game.graveyard), 1)
+
+    def test_jester_alive_loses(self) -> None:
+        self.step_to_next(TurnPhase.DAYLIGHT)
+        wcs, winners = self._evaluate_win()
+        self.assertNotIn(JesterWin, wcs)
 
 
 if __name__ == "__main__":

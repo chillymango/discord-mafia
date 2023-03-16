@@ -110,13 +110,13 @@ class Session:
             raise ValueError("Failed to setup game. Setup is likely unstable")
 
         # TODO: block this out somewhere else
-        #self._game.debug_override_role("chilly mango", "Constable")
+        #self._game.debug_override_role("donbot", "Executioner")
+        #self._game.debug_override_role("asiannub", "Vigilante")
         #self._game.debug_override_role("donbot", "Blackmailer")
         #self._game.debug_override_role("mmmmmmmmmmmmm", "Mayor")
         #self._game.debug_override_role("pandomodger", "Judge")
         #self._game.debug_override_role("mimitchi", "Jailor")
         #self._game.debug_override_role("wagyu jubei", "Blackmailer")
-        #self._game.debug_override_role("asiannub", "Escort")
         #self._game.debug_override_role("wagyu jubei")
 
         api.set_bot_api(BotApi(self._game))
@@ -179,5 +179,7 @@ class Session:
         self._messenger.queue_message(Message.announce(self._game, "We have reached a conclusion..."))
         await asyncio.sleep(8.0)
         await self._town_hall.display_victory(winners, wc)
+        await asyncio.sleep(5.0)
+        await self._town_hall.display_original_roles()
         channel_manager.mark_to_preserve(self._town_hall.ch_bulletin)
         self.log.info("FIN")

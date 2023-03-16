@@ -295,10 +295,6 @@ class Jail(Hideout):
         Threads should be sanitized after usage.
         """
         self._threads: T.List[disnake.Thread] = list()
-        jailor_count = len(self._game.get_live_actors_by_role(Jailor))
-        futures = [asyncio.ensure_future(self.create_thread()) for _ in range(2 * jailor_count)]
-        await asyncio.gather(*futures)
-
         self._message_tunnel = MessageTunnel()
 
     def is_open(self) -> bool:

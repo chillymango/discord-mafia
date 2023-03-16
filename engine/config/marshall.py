@@ -21,3 +21,4 @@ class MarshallSection(Section):
 
     group_executions_allowed: int = 1
     executions_per_group: int = 3
+    cannot_be_healed: bool = True

@@ -16,6 +16,7 @@ from chatapi.app.bot_api import BotApi
 from chatapi.app.server import run_app_and_bot
 from chatapi.app.grpc.api import api
 from chatapi.app.grpc.api import GrpcBotApi
+from chatapi.discord.bug_report import bug_report_modal
 from chatapi.discord.channel import channel_manager
 from chatapi.discord.chat import CHAT_DRIVERS
 from chatapi.discord.game import GAMES
@@ -27,6 +28,7 @@ from chatapi.discord.lobby import NewLobby
 from chatapi.discord.permissions import ALL_ROLES
 from engine.actor import Actor
 from engine.game import Game
+from engine.game_format import GameFormat
 from engine.message import Message
 from engine.role.mafia.godfather import Godfather
 from engine.player import Player
@@ -128,6 +130,12 @@ def main() -> None:
         global bot
         interaction: "Interaction" = interaction
         if command == "create-game":
+            if args == "forum":
+                print("Forum Mafia Lobby")
+                game_format = GameFormat.FORUM
+            else:
+                print("Debug Lobby")
+                game_format = GameFormat.SPEED
             if interaction.guild in lobby_manager:
                 if lobby_manager[interaction.guild] == LobbyState.OPEN:
                     await interaction.response.send_message(
@@ -136,75 +144,13 @@ def main() -> None:
                     return
             try:
                 game_channel = await channel_manager.create_channel(interaction.guild, "mafia-bulletin")
-                lobby = NewLobby(interaction.guild, game_channel, debug=True)
+                lobby = NewLobby(interaction.guild, game_channel, format=game_format, debug=True)
                 lobby_manager[interaction.guild] = lobby
             except BaseException:  # if creation fails, do not block another re-attempt
                 lobby_manager.pop(interaction.guild)
             await lobby.add_player(interaction)
-    
-        elif command == "join-game":
-            if interaction.guild not in lobby_manager:
-                return await interaction.response.send_message("No game in progress. Create one first.", ephemeral=True)
-            lobby = lobby_manager[interaction.guild]
-            await lobby.add_player(interaction)
-    
-        elif command == "add-bot":
-            print('adding a bot')
-            fake_player = Player("bot")
-            game.add_players(fake_player)
-            await interaction.response.send_message("Added a bot", ephemeral=True)
-    
-        elif command == "show-lobby":
-            await interaction.response.send_message(
-                "Lobby:\n\t" + "\n\t".join([p.name for p in game.players]), ephemeral=True
-            )
-    
         else:
             await interaction.response.send_message(f"Invalid command {command}", ephemeral=True)
-    
-    
-    async def game_subparser(player, interaction, command: str, args: str) -> None:
-        if command == "status":
-            # bring up the current game state
-            await interaction.response.send_message("")
-    
-        elif command in ("last-will", "lw", "lastwill", "will"):
-            # TODO: update last will
-            await interaction.response.send_message("Last Will successfully updated")
-    
-        elif command == "countdown-30s":
-            # test a command to countdown for 30s then delete the message
-            countdown_to = int(time.time() + 30.0)
-            await interaction.response.send_message(f"<t:{countdown_to}:R>", ephemeral=True, delete_after=30.0)
-    
-        elif command == "valid-targets":
-            actor: "Actor" = game.get_actor_for_player(player)
-            options = actor.get_target_options()
-            await interaction.response.send_message(
-                f"You can target:\n\t" + "\n\t".join([f'[{anon.number}] {anon.name}' for anon in options])
-            )
-    
-        elif command == "target":
-            actor: "Actor" = game.get_actor_for_player(player)
-            to_target = args.split()
-            target_array = list()
-            for target in to_target:
-                target_actor = None
-                try:
-                    target = int(target)
-                except ValueError:
-                    # try to find by name
-                    try:
-                        target = game.get_actor_by_name(target)
-                    except ValueError:
-                        pass
-                if target is None:
-                    await interaction.response.send_message(
-                        f"Unable to resolve {target} as a valid target. Please check valid targets."
-                    )
-                    return
-                target_array.append(target_actor)
-            actor.choose_targets(*target_array)
 
     @bot.slash_command(description="Issue chat to a Mafia Game")
     async def chat(interaction, command_input: str):
@@ -252,32 +198,21 @@ def main() -> None:
         await rule.edit(enabled=False)
         await interaction.send("Automod rule disabled", ephemeral=True)
 
+    @bot.slash_command(description="File a bug report")
+    async def bug_report(interaction):
+        interaction: "disnake.ApplicationCommandInteraction" = interaction
+        # open the bug report modal
+        modal = bug_report_modal()
+        await interaction.response.send_modal(modal)
+
     @bot.slash_command(description="Interact with a Mafia Game")
     async def mafia(interaction, command_input: str):
         """Play Mafia or something"""
         interaction: Interaction = interaction
         command, _, args = command_input.partition(' ')
         bot.user.name = "Mafia Bot"
-        #interaction.author.nick = "This is a test nickname"
-        # change the username real fast?
-        #name_changer = NameChanger(bot.user)
-        #await interaction.guild.me.edit(nick='Hello Crier Here')
-        #async with name_changer.temporary_name("hello test bot name"):
-        #async with name_changer.temporary_name("hello2 electric boogaloo"):
-        #    await interaction.send("yeet me into the sun")
         lobby = lobby_manager.get(interaction.guild)
         if command == "test":
-            # testing Court anonymity?!
-            # add the automod rule and enable it?
-            #rule = await interaction.guild.create_automod_rule(
-            #    name="Anonymity",
-            #    event_type=disnake.AutoModEventType.message_send,
-            #    actions=[disnake.AutoModAction(type=disnake.AutoModActionType.block_message)],
-            #    trigger_type=disnake.AutoModTriggerType.keyword,
-            #    trigger_metadata=disnake.AutoModTriggerMetadata(regex_patterns=["^.*$"]),
-            #    enabled=True,
-            #    # in prod, exempt the default non-playing server role
-            #)
             game = Game({})
             gf = Godfather({})
             game.add_actors(Actor(Player(interaction.user.name), gf, game))
@@ -286,15 +221,6 @@ def main() -> None:
             )
             CHAT_DRIVERS[interaction.channel] = driver
             driver.start()
-
-#            async for member in interaction.guild.fetch_members():  # replace with live players
-#                if member.bot:
-#                    continue
-#
-#                try:
-#                    await member.edit(nick="Someone")
-#                except Exception as exc:
-#                    print(f"Skipping nickname edit for {member.name}")
 
             await interaction.send("new thread")
             post = await interaction.original_response()
@@ -305,19 +231,6 @@ def main() -> None:
                 
                 await interaction.send("okee")
                 await asyncio.sleep(600.0)
-
-#            try:
-#                await rule.delete()
-#            except Exception as exc:
-#                print(f"Failed to delete AutoModRule: {repr(exc)}")
-
-#            async for member in interaction.guild.fetch_members():  # replace with live players
-#                if member.bot:
-#                    continue
-#                try:
-#                    await member.edit(nick=None)
-#                except Exception as exc:
-#                    print(f"Skipping nickname edit for {member.name}")
 
         elif command == "mafia-chat":
             await interaction.send("ack", ephemeral=True)
@@ -338,8 +251,6 @@ def main() -> None:
             await interaction.send("i'm printing messages")
         elif lobby is None or lobby.state in (LobbyState.OPEN, LobbyState.CLOSED):
             await lobby_subparser(interaction.user, interaction, command, args)
-        elif lobby.state == LobbyState.STARTED:
-            await game_subparser(interaction.user, interaction, command, args)
 
     bot.run(TOKEN)
     print("Shutdown complete")

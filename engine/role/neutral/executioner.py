@@ -53,7 +53,7 @@ class Executioner(NeutralRole):
         while tries < 15:
             tries += 1
             candidate = random.choice(game.get_live_town_actors())
-            if candidate.role not in BLOCKLISTED_ROLES:
+            if type(candidate.role) not in BLOCKLISTED_ROLES:
                 break
         else:
             logger.warning(f"Failed to select a non-blocklisted role. Picking one randomly.")

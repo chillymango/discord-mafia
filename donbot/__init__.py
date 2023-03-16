@@ -393,7 +393,7 @@ class DonBot:
             except RpcError as error:
                 self.log.exception(error)
 
-    async def target(self, target_name: str) -> None:
+    async def target(self, target_name: T.Optional[str]) -> None:
         async with aio.insecure_channel(BIND) as channel:
             stub = service_pb2_grpc.GrpcBotApiStub(channel)
             try:
@@ -488,10 +488,11 @@ class DonBot:
                 # always latch, even for AI - do not permit retargeting
                 self._action_decisions[(self._game.turn_phase, self._game.turn_number)] = selected
                 if selected:
-                    if selected == 'YES':
+                    if selected[0] == 'YES':
                         await self.target(self._actor.player.name)
                         self.record_event(f"Targeted self")
-                    elif selected == 'NO':
+                    elif selected[0] == 'NO':
+                        await self.target(None)
                         self.record_event("No target")
                     else:
                         await self.target(*selected)

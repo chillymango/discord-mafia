@@ -35,5 +35,9 @@ class Follow(Action):
         Publish a private message to our actor with results.
         """
         self.reset_results()
-        self._action_result["visited"] = [targ.name for targ in target.targets]
+        role_config = actor.game._config.role_config
+        if role_config.detective.ignores_detection_immunity or not target.role._detect_immune:
+            self._action_result["visited"] = [targ.name for targ in target.targets]
+        else:
+            self._action_result["visited"] = []
         return True

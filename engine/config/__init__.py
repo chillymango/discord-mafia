@@ -167,6 +167,7 @@ class Timing(Section):
     trial_defense_duration: float = 30.0
     lynch_vote_duration: float = 30.0
     skip_first_day: bool = True
+    first_day_duration: float = 30.0
 
     @staticmethod
     def sheet_range() -> T.Tuple[str, str, str]:

@@ -26,5 +26,5 @@ class Mayor(Reveal):
         """
         Giv vots
         """
-        if actor.game.tribunal.mayor_action(actor):
+        if actor.game.tribunal.mayor_action(actor, votes=actor.game._config.role_config.mayor.vote_count):
             return True

@@ -54,14 +54,18 @@ class Protect(Action):
         # find the first attacker who targeted your target
         # TODO: fix circ import
         from engine.role import KILLING_ROLES
+        if target.game != actor.game:
+            raise ValueError(f"{actor} and {target} do not belong to the same game")
 
+        game = actor.game
         # if multiple attacker matches, randomize the one that actually gets selected for intercept
-        for anon in actor.game.get_live_actors(shuffle=True):
+        for anon in game.get_live_actors(shuffle=True):
             if actor == anon:
                 continue
             if target in anon.targets and type(anon.role) in KILLING_ROLES and anon.is_alive:
                 # always ignore immunity, just inflict damage
-                self.attack(anon)
+                if game._config.role_config.bodyguard.kill_ignores_night_immunity or not anon.role._night_immune:
+                    self.attack(anon)
                 self.attack(actor)
                 # also actually perform an interception
                 anon.choose_targets(actor)

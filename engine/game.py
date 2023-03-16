@@ -14,6 +14,7 @@ from engine.report import DeathReporter
 from engine.message import Messenger
 from engine.phase import GamePhase
 from engine.phase import TurnPhase
+from engine.resolver import SequenceEvent
 from engine.role.base import Role
 from engine.role.base import RoleFactory
 from engine.role.base import RoleGroup
@@ -72,9 +73,18 @@ class Game:
         # mapping of jailor to prisoner
         self._jail_map: T.Dict["Actor", "Actor"] = dict()
 
+        # this queue loads delayed action callbacks that fire during the dusk transition
+        # load the sequence event ahead of time
+        self._day_queue: T.List["SequenceEvent"] = list()
+
+        # this queue loads delayed action callbacks that fire during the night sequence
+        self._night_queue: T.List["SequenceEvent"] = list()
+
         # when this attaches to a session, the channel ID of the game or
         # the channel name of the game should be used for this instead
         self.log = logging.Logger(f"Game-{id(self)}")
+        self.log.addHandler(log.ch)
+        self.log.setLevel(logging.INFO)
 
     def to_proto(self) -> state_pb2.Game:
         game = state_pb2.Game(
@@ -85,7 +95,6 @@ class Game:
         )
         game.actors.extend([a.to_proto() for a in self.get_actors()])
         game.graveyard.extend([ts.to_proto() for ts in self._graveyard])
-        # TODO: graveyard
         return game
 
     def transform_actor_role(self, actor: "Actor", role_klass: T.Type[Role]) -> None:
@@ -163,6 +172,7 @@ class Game:
         role = rf.create_by_name(role_name)
         print(f"Making {player_name} a {role_name}")
         actor._role = role
+        role.init_with_game(self)
 
     def get_live_human_actors(self) -> T.List["Actor"]:
         return [actor for actor in self._actors if actor.is_alive and actor.player.is_human]

@@ -18,6 +18,10 @@ class Marshall(Reveal):
             True: [Crime.CORRUPTION],
         }
 
+    @classmethod
+    def instant(cls) -> bool:
+        return True
+
     def action_result(self, actor: "Actor", *targets: "Actor") -> T.Optional[bool]:
         """
         Modify the Tribunal for the day.
